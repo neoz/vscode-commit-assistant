@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 interface GitExtension {
   getAPI(version: number): GitAPI;
@@ -58,13 +61,36 @@ export function activate(context: vscode.ExtensionContext) {
 
 function generateCommitMessage(diff: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', ['-p', 'Generate a concise git commit message for the following diff. Output only the commit message, nothing else:'], {
+    // Truncate diff if too large (keep under 10KB for command line)
+    const maxLen = 10000;
+    const truncatedDiff = diff.length > maxLen
+      ? diff.substring(0, maxLen) + '\n... (truncated)'
+      : diff;
+
+    // Write prompt + diff to temp file, then pipe to claude
+    const inputFile = path.join(os.tmpdir(), `claude-input-${Date.now()}.txt`);
+    const content = `Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.
+
+${truncatedDiff}`;
+    fs.writeFileSync(inputFile, content);
+
+    const proc = spawn('cmd', ['/c', `type "${inputFile}" | claude -p --dangerously-skip-permissions`], {
       shell: true,
       env: process.env
     });
 
+    // Store inputFile for cleanup
+    const cleanup = () => { try { fs.unlinkSync(inputFile); } catch {} };
+
     let stdout = '';
     let stderr = '';
+
+    // Timeout after 60 seconds
+    const timeout = setTimeout(() => {
+      proc.kill();
+      cleanup();
+      reject(new Error('Claude timed out'));
+    }, 60000);
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -75,6 +101,9 @@ function generateCommitMessage(diff: string): Promise<string> {
     });
 
     proc.on('close', (code) => {
+      clearTimeout(timeout);
+      cleanup();
+
       if (code === 0) {
         resolve(stdout.trim());
       } else {
@@ -83,12 +112,10 @@ function generateCommitMessage(diff: string): Promise<string> {
     });
 
     proc.on('error', (err) => {
+      clearTimeout(timeout);
+      cleanup();
       reject(new Error(`Failed to spawn claude: ${err.message}`));
     });
-
-    // Pass diff via stdin to avoid command line length limits
-    proc.stdin.write(diff);
-    proc.stdin.end();
   });
 }
 
