@@ -1,6 +1,6 @@
 {
   "name": "claude-commit",
-  "publisher": "anthropic",
+  "publisher": "computer.angel",
   "displayName": "Claude Commit Message",
   "description": "Generate commit messages using Claude Code",
   "version": "0.0.1",

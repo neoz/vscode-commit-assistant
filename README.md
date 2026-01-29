@@ -19,7 +19,7 @@ A VS Code extension that generates git commit messages using [Claude Code](https
 ### From Source
 
 ```bash
-git clone https://github.com/anthropics/claude-commit.git
+git clone https://github.com/xxx/claude-commit.git
 cd claude-commit
 npm install
 npm run compile
