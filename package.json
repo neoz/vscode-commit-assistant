@@ -1,5 +1,6 @@
 {
   "name": "claude-commit",
+  "publisher": "anthropic",
   "displayName": "Claude Commit Message",
   "description": "Generate commit messages using Claude Code",
   "version": "0.0.1",
@@ -7,6 +8,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
+  "enabledApiProposals": ["contribSourceControlInputBoxMenu"],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -18,6 +20,13 @@
       }
     ],
     "menus": {
+      "scm/inputBox": [
+        {
+          "command": "claude-commit.generate",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ],
       "scm/title": [
         {
           "command": "claude-commit.generate",
