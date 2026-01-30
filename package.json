@@ -3,7 +3,7 @@
   "publisher": "neoz",
   "displayName": "Claude Commit Message",
   "description": "Generate commit messages using Claude Code",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/your-username/your-repo.git"
@@ -11,8 +11,12 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "enabledApiProposals": ["contribSourceControlInputBoxMenu"],
+  "categories": [
+    "Other"
+  ],
+  "enabledApiProposals": [
+    "contribSourceControlInputBoxMenu"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {

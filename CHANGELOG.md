@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.2](https://github.com/your-username/your-repo/compare/v0.0.1...v0.0.2) (2026-01-30)
+
+
+### Features
+
+* **config:** add configurable settings for diff length and prompt template ([b6a5da3](https://github.com/your-username/your-repo/commit/b6a5da311e54b3367849ade34aec9b11f9349f88))
+
 ### 0.0.1 (2026-01-30)
 
 
