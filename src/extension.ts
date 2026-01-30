@@ -61,17 +61,17 @@ export function activate(context: vscode.ExtensionContext) {
 
 function generateCommitMessage(diff: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    // Truncate diff if too large (keep under 10KB for command line)
-    const maxLen = 10000;
+    const config = vscode.workspace.getConfiguration('claude-commit');
+    const maxLen = config.get<number>('maxDiffLength', 10000);
+    const promptTemplate = config.get<string>('promptTemplate',
+      'Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.');
+
     const truncatedDiff = diff.length > maxLen
       ? diff.substring(0, maxLen) + '\n... (truncated)'
       : diff;
 
-    // Write prompt + diff to temp file, then pipe to claude
     const inputFile = path.join(os.tmpdir(), `claude-input-${Date.now()}.txt`);
-    const content = `Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.
-
-${truncatedDiff}`;
+    const content = `${promptTemplate}\n\n${truncatedDiff}`;
     fs.writeFileSync(inputFile, content);
 
     const isWindows = process.platform === 'win32';

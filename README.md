@@ -65,7 +65,8 @@ type(scope): description
 
 ## Extension Settings
 
-This extension has no configurable settings.
+- `claude-commit.maxDiffLength`: Maximum character length of diff to send to Claude (default: 10000)
+- `claude-commit.promptTemplate`: Custom prompt template for generating commit messages
 
 ## Known Issues
 

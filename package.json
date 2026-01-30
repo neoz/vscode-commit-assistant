@@ -34,6 +34,21 @@
           "when": "scmProvider == git"
         }
       ]
+    },
+    "configuration": {
+      "title": "Claude Commit",
+      "properties": {
+        "claude-commit.maxDiffLength": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum character length of diff to send to Claude. Larger diffs will be truncated."
+        },
+        "claude-commit.promptTemplate": {
+          "type": "string",
+          "default": "Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.",
+          "description": "Prompt template for generating commit messages. The diff will be appended after this prompt."
+        }
+      }
     }
   },
   "scripts": {
