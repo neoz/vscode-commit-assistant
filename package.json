@@ -6,7 +6,7 @@
   "version": "0.0.2",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/your-repo.git"
+    "url": "https://github.com/neoz/vscode-commit-assistant.git"
   },
   "engines": {
     "vscode": "^1.85.0"
