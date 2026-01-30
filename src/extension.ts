@@ -74,7 +74,7 @@ function generateCommitMessage(diff: string): Promise<string> {
 ${truncatedDiff}`;
     fs.writeFileSync(inputFile, content);
 
-    const proc = spawn('cmd', ['/c', `type "${inputFile}" | claude -p --dangerously-skip-permissions`], {
+    const proc = spawn('cmd', ['/c', `type "${inputFile}" | claude -p`], {
       shell: true,
       env: process.env
     });
