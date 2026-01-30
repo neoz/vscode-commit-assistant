@@ -32,14 +32,8 @@ Then press F5 in VS Code to launch Extension Development Host.
 To package the extension for distribution:
 
 ```bash
-# Install vsce (VS Code Extension CLI) globally
-npm install -g @vscode/vsce
-
-# Build the extension
-npm run compile
-
-# Package into .vsix file
-vsce package
+npm install
+npm run package
 ```
 
 This creates `claude-commit-0.0.1.vsix` which can be shared and installed via "Install from VSIX..." in VS Code.
@@ -62,6 +56,7 @@ type(scope): description
 - Works with staged changes only
 - Shows progress indicator while generating
 - 60 second timeout for large diffs
+- Cross-platform support (Windows, macOS, Linux)
 
 ## Requirements
 
@@ -75,7 +70,6 @@ This extension has no configurable settings.
 ## Known Issues
 
 - Large diffs (>10KB) are truncated before sending to Claude
-- Requires `--dangerously-skip-permissions` flag for Claude CLI
 
 ## License
 
