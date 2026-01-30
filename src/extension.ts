@@ -74,10 +74,10 @@ function generateCommitMessage(diff: string): Promise<string> {
 ${truncatedDiff}`;
     fs.writeFileSync(inputFile, content);
 
-    const proc = spawn('cmd', ['/c', `type "${inputFile}" | claude -p`], {
-      shell: true,
-      env: process.env
-    });
+    const isWindows = process.platform === 'win32';
+    const proc = isWindows
+      ? spawn('cmd', ['/c', `type "${inputFile}" | claude -p`], { shell: true, env: process.env })
+      : spawn('sh', ['-c', `cat "${inputFile}" | claude -p`], { shell: true, env: process.env });
 
     // Store inputFile for cleanup
     const cleanup = () => { try { fs.unlinkSync(inputFile); } catch {} };
