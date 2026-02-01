@@ -1,5 +1,23 @@
 import * as vscode from 'vscode';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { execSync } from 'child_process';
+import * as path from 'path';
+
+/**
+ * Find the path to the Claude Code executable
+ */
+function findClaudeExecutable(): string | undefined {
+  try {
+    const isWindows = process.platform === 'win32';
+    const command = isWindows ? 'where claude' : 'which claude';
+    const result = execSync(command, { encoding: 'utf-8' }).trim();
+    // 'where' on Windows may return multiple lines, take the first
+    const firstPath = result.split('\n')[0].trim();
+    return firstPath || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface GitExtension {
   getAPI(version: number): GitAPI;
@@ -145,12 +163,19 @@ async function generateCommitMessage(
   const generatePromise = (async () => {
     let commitMessage = '';
 
+    // Find Claude executable path
+    const claudePath = findClaudeExecutable();
+    if (!claudePath) {
+      throw new Error('Claude Code CLI not found in PATH');
+    }
+
     for await (const message of query({
       prompt,
       options: {
         abortController,
         maxTurns: 1,
-        allowedTools: []
+        allowedTools: [],
+        pathToClaudeCodeExecutable: claudePath
       }
     })) {
       // Check for abort
