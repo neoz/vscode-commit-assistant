@@ -8,25 +8,22 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 12 items |
-| **Now** | 4 items |
+| **Done** | 16 items |
+| **Now** | 0 items |
 | **Next** | 4 items |
 | **Later** | 5 items |
 
-**Current Version**: 0.0.3
+**Current Version**: 0.0.4
 
 ---
 
 ## Now (Current Focus)
 
-Items actively being worked on or ready to start immediately.
+All v1.0.0 items have been completed. Ready to start Next items.
 
 | Item | Description | Status | Priority |
 |------|-------------|--------|----------|
-| **Claude Agent SDK migration** | Replace CLI spawning with `@anthropic-ai/claude-agent-sdk` for better reliability and cancellation support | **Not Started** | P0 |
-| Cancellable generation | Allow users to abort slow generations via progress dialog (enabled by SDK migration) | **Not Started** | P0 |
-| Improved error messages | Better detection and messaging for Claude Code installation/authentication issues | **Not Started** | P1 |
-| Reduced timeout | Lower timeout from 60s to 30s with SDK's faster response handling | **Not Started** | P1 |
+| - | No items currently in progress | - | - |
 
 ---
 
@@ -63,6 +60,10 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
+| **Claude Agent SDK migration** | Replace CLI spawning with `@anthropic-ai/claude-agent-sdk` | 0.0.4 | **Done** |
+| **Cancellable generation** | Users can abort generation via progress dialog cancel button | 0.0.4 | **Done** |
+| **Improved error messages** | Auto-detect auth/installation issues with actionable guidance | 0.0.4 | **Done** |
+| **Reduced timeout** | Lowered timeout from 60s to 30s | 0.0.4 | **Done** |
 | Core commit message generation | Generate message from staged diff via Claude CLI | 0.0.1 | **Done** |
 | SCM input box button | Sparkle button in SCM input box (proposed API) | 0.0.1 | **Done** |
 | SCM title bar button | Fallback button in SCM header | 0.0.1 | **Done** |
@@ -101,10 +102,7 @@ Items shipped in previous releases.
 
 ## Prioritization Rationale
 
-**Now items** were selected based on:
-- Foundation for future features (SDK migration enables cancellation, better errors)
-- User experience improvements (cancellable generation, better errors)
-- Reliability improvements (SDK vs CLI spawning)
+**Now items**: v1.0.0 complete - SDK migration shipped with cancellation, better errors, and faster timeout.
 
 **Next items** were selected based on:
 - User control (model selection for cost/quality tradeoff)
@@ -113,7 +111,7 @@ Items shipped in previous releases.
 - Power user needs (multi-repo support)
 
 **Later items** are deferred because:
-- Lower priority than SDK migration (commit body support)
+- Lower priority than core improvements (commit body support)
 - Require SDK features to be stable first (streaming)
 - Require significant new UI (multiple suggestions)
 - Separate feature scope (PR descriptions)
@@ -122,12 +120,38 @@ Items shipped in previous releases.
 
 ## Version Planning
 
-| Version | Theme | Key Items |
-|---------|-------|-----------|
-| **1.0.0** | **SDK Migration** | Claude Agent SDK integration, cancellable generation, improved errors, 30s timeout |
-| 1.1.0 | User Control | Model selection, keyboard shortcut, token usage display |
-| 1.2.0 | Power Users | Multi-repo support, commit body support |
-| 2.0.0 | Enhanced UX | Streaming response, multiple suggestions, smart diff summarization |
+| Version | Theme | Key Items | Status |
+|---------|-------|-----------|--------|
+| **0.0.4** | **SDK Migration** | Claude Agent SDK, cancellable generation, improved errors, 30s timeout | **Done** |
+| 1.0.0 | Stable Release | Version bump for marketplace, no new features | **Planned** |
+| 1.1.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
+| 1.2.0 | Power Users | Multi-repo support, commit body support | **Planned** |
+| 2.0.0 | Enhanced UX | Streaming response, multiple suggestions, smart diff summarization | **Planned** |
+
+---
+
+## Changes This Update
+
+### v0.0.4 Release (2026-02-01)
+
+**Items Completed:**
+- Claude Agent SDK migration (P0)
+- Cancellable generation (P0)
+- Improved error messages (P1)
+- Reduced timeout to 30s (P1)
+
+**Architecture Changes:**
+- Replaced `child_process.spawn` with `@anthropic-ai/claude-agent-sdk`
+- Removed temp file creation/cleanup
+- Removed platform-specific shell commands
+- Added AbortController for cancellation
+- Added auto-detection for auth and installation errors
+
+**User-Facing Improvements:**
+- Cancel button now works during generation
+- Clearer error messages when Claude Code not installed/authenticated
+- Faster timeout (30s vs 60s)
+- Same workflow - no breaking changes
 
 ---
 
@@ -135,21 +159,13 @@ Items shipped in previous releases.
 
 ### What Changes for Users
 
-| Aspect | Before (v0.x) | After (v1.0) |
-|--------|---------------|--------------|
+| Aspect | Before (v0.x) | After (v0.0.4+) |
+|--------|---------------|-----------------|
 | Claude Code requirement | CLI must be in PATH | Same (SDK uses Claude Code runtime) |
 | Generation speed | ~5-10 seconds | ~2-5 seconds (no process spawn) |
 | Cancellation | Not supported | Supported via progress dialog |
 | Timeout | 60 seconds | 30 seconds |
 | Error messages | Generic CLI errors | Specific, actionable messages |
-
-### What Changes for Development
-
-1. Replace `child_process.spawn` with SDK calls
-2. Remove temp file creation/cleanup
-3. Remove platform-specific shell commands
-4. Add AbortController for cancellation
-5. Update error handling for SDK error types
 
 ### Breaking Changes
 

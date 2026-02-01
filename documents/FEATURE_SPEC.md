@@ -64,23 +64,23 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 ## 5. Requirements
 
-### Must-Have (P0)
+### Must-Have (P0) - **All Completed in v0.0.4**
 
-| Requirement | Acceptance Criteria |
-|-------------|---------------------|
-| Claude Agent SDK integration | Extension uses `@anthropic-ai/claude-agent-sdk` instead of spawning CLI process |
-| Generate commit message from staged diff | Given staged changes exist, when user clicks sparkle button, then a commit message appears in the input box within 30 seconds |
-| Access via SCM input box button | Button with sparkle icon appears in SCM input box when a git repo is open |
-| Access via SCM title bar | Button appears in SCM title bar as fallback for environments without proposed API |
-| Conventional commit format output | Generated messages match pattern `type(scope): description` |
-| Progress notification | User sees "Generating commit message..." during generation with cancel option |
-| Cancellable generation | User can cancel in-progress generation via progress dialog |
-| Error handling: no staged changes | Warning message "No staged changes to commit" when diff is empty |
-| Error handling: no git repo | Error message "No git repository found" when no repo is active |
-| Error handling: Claude Code not available | Error message with instructions to install/authenticate Claude Code |
-| Error handling: API errors | Clear messages for rate limits, network errors, authentication failures |
-| 30-second timeout | Generation aborts with timeout message after 30 seconds |
-| Cross-platform support | Works on Windows, macOS, and Linux |
+| Requirement | Acceptance Criteria | Status |
+|-------------|---------------------|--------|
+| Claude Agent SDK integration | Extension uses `@anthropic-ai/claude-agent-sdk` instead of spawning CLI process | **Done** |
+| Generate commit message from staged diff | Given staged changes exist, when user clicks sparkle button, then a commit message appears in the input box within 30 seconds | **Done** |
+| Access via SCM input box button | Button with sparkle icon appears in SCM input box when a git repo is open | **Done** |
+| Access via SCM title bar | Button appears in SCM title bar as fallback for environments without proposed API | **Done** |
+| Conventional commit format output | Generated messages match pattern `type(scope): description` | **Done** |
+| Progress notification | User sees "Generating commit message..." during generation with cancel option | **Done** |
+| Cancellable generation | User can cancel in-progress generation via progress dialog | **Done** |
+| Error handling: no staged changes | Warning message "No staged changes to commit" when diff is empty | **Done** |
+| Error handling: no git repo | Error message "No git repository found" when no repo is active | **Done** |
+| Error handling: Claude Code not available | Error message with instructions to install/authenticate Claude Code | **Done** |
+| Error handling: API errors | Clear messages for rate limits, network errors, authentication failures | **Done** |
+| 30-second timeout | Generation aborts with timeout message after 30 seconds | **Done** |
+| Cross-platform support | Works on Windows, macOS, and Linux | **Done** |
 
 ### Nice-to-Have (P1)
 
@@ -128,11 +128,11 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 | Question | Owner | Status |
 |----------|-------|--------|
-| What is the minimum Claude Agent SDK version required? | Engineering | Blocking |
-| Does the SDK support AbortController for cancellation? | Engineering | Blocking |
-| Should we add telemetry to measure usage? | Product/Engineering | No |
-| Should we support commit message body (multi-line) in addition to subject? | Product | No (v1 focuses on subject line) |
-| How should we handle very large diffs (>10k chars)? | Engineering | No (currently truncates with warning) |
+| What is the minimum Claude Agent SDK version required? | Engineering | **Resolved** - Using ^0.1.0 |
+| Does the SDK support AbortController for cancellation? | Engineering | **Resolved** - Yes, via options.abortController |
+| Should we add telemetry to measure usage? | Product/Engineering | Open |
+| Should we support commit message body (multi-line) in addition to subject? | Product | Open (v1 focuses on subject line) |
+| How should we handle very large diffs (>10k chars)? | Engineering | **Resolved** - Truncates with "... (truncated)" suffix |
 
 ---
 
