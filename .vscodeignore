@@ -9,3 +9,4 @@ esbuild.js
 node_modules/**
 documents/**
 *.vsix
+CLAUDE.md
