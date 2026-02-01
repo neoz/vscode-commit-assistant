@@ -54,8 +54,8 @@ type(scope): description
 
 - Generates concise, conventional commit messages
 - Works with staged changes only
-- Shows progress indicator while generating
-- 60 second timeout for large diffs
+- Shows progress indicator while generating (cancellable)
+- 30 second timeout for large diffs
 - Cross-platform support (Windows, macOS, Linux)
 
 ## Requirements

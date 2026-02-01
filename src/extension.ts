@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
-import { spawn } from 'child_process';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 interface GitExtension {
   getAPI(version: number): GitAPI;
@@ -38,19 +35,51 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    const abortController = new AbortController();
+
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
         title: 'Generating commit message with Claude...',
-        cancellable: false
+        cancellable: true
       },
-      async () => {
+      async (_progress, token) => {
+        // Connect VS Code cancellation to AbortController
+        const cancellationListener = token.onCancellationRequested(() => {
+          abortController.abort();
+        });
+
         try {
-          const message = await generateCommitMessage(diff);
-          repo.inputBox.value = message;
+          const message = await generateCommitMessage(diff, abortController);
+          if (!token.isCancellationRequested) {
+            repo.inputBox.value = message;
+          }
         } catch (err) {
+          if (token.isCancellationRequested) {
+            vscode.window.showInformationMessage('Commit message generation cancelled');
+            return;
+          }
+
           const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-          vscode.window.showErrorMessage(`Failed to generate commit message: ${errorMsg}`);
+
+          // Auto-detect specific error types
+          if (isAuthError(errorMsg)) {
+            vscode.window.showErrorMessage(
+              'Claude Code is not authenticated. Please run "claude" in your terminal to authenticate.'
+            );
+          } else if (isNotInstalledError(errorMsg)) {
+            vscode.window.showErrorMessage(
+              'Claude Code CLI is not installed. Install it from https://claude.ai/code'
+            );
+          } else if (errorMsg.includes('timed out')) {
+            vscode.window.showErrorMessage(
+              'Commit message generation timed out. Try with fewer staged changes.'
+            );
+          } else {
+            vscode.window.showErrorMessage(`Failed to generate commit message: ${errorMsg}`);
+          }
+        } finally {
+          cancellationListener.dispose();
         }
       }
     );
@@ -59,64 +88,104 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(command);
 }
 
-function generateCommitMessage(diff: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const config = vscode.workspace.getConfiguration('claude-commit');
-    const maxLen = config.get<number>('maxDiffLength', 10000);
-    const promptTemplate = config.get<string>('promptTemplate',
-      'Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.');
+function isAuthError(message: string): boolean {
+  const authPatterns = [
+    'authentication',
+    'authenticated',
+    'API key',
+    'api_key',
+    'unauthorized',
+    'not logged in',
+    'please login',
+    'auth'
+  ];
+  const lowerMsg = message.toLowerCase();
+  return authPatterns.some(pattern => lowerMsg.includes(pattern.toLowerCase()));
+}
 
-    const truncatedDiff = diff.length > maxLen
-      ? diff.substring(0, maxLen) + '\n... (truncated)'
-      : diff;
+function isNotInstalledError(message: string): boolean {
+  const notInstalledPatterns = [
+    'not found',
+    'ENOENT',
+    'command not found',
+    'not installed',
+    'cannot find',
+    'CLINotFoundError'
+  ];
+  const lowerMsg = message.toLowerCase();
+  return notInstalledPatterns.some(pattern => lowerMsg.includes(pattern.toLowerCase()));
+}
 
-    const inputFile = path.join(os.tmpdir(), `claude-input-${Date.now()}.txt`);
-    const content = `${promptTemplate}\n\n${truncatedDiff}`;
-    fs.writeFileSync(inputFile, content);
+async function generateCommitMessage(
+  diff: string,
+  abortController: AbortController
+): Promise<string> {
+  const config = vscode.workspace.getConfiguration('claude-commit');
+  const maxLen = config.get<number>('maxDiffLength', 10000);
+  const promptTemplate = config.get<string>('promptTemplate',
+    'Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.');
 
-    const isWindows = process.platform === 'win32';
-    const proc = isWindows
-      ? spawn('cmd', ['/c', `type "${inputFile}" | claude -p`], { shell: true, env: process.env })
-      : spawn('sh', ['-c', `cat "${inputFile}" | claude -p`], { shell: true, env: process.env });
+  const truncatedDiff = diff.length > maxLen
+    ? diff.substring(0, maxLen) + '\n... (truncated)'
+    : diff;
 
-    // Store inputFile for cleanup
-    const cleanup = () => { try { fs.unlinkSync(inputFile); } catch {} };
+  const prompt = `${promptTemplate}\n\n${truncatedDiff}`;
 
-    let stdout = '';
-    let stderr = '';
+  // Set up timeout (30 seconds)
+  const timeoutMs = 30000;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-    // Timeout after 60 seconds
-    const timeout = setTimeout(() => {
-      proc.kill();
-      cleanup();
-      reject(new Error('Claude timed out'));
-    }, 60000);
-
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on('close', (code) => {
-      clearTimeout(timeout);
-      cleanup();
-
-      if (code === 0) {
-        resolve(stdout.trim());
-      } else {
-        reject(new Error(stderr || `claude exited with code ${code}`));
-      }
-    });
-
-    proc.on('error', (err) => {
-      clearTimeout(timeout);
-      cleanup();
-      reject(new Error(`Failed to spawn claude: ${err.message}`));
-    });
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      abortController.abort();
+      reject(new Error('Request timed out after 30 seconds'));
+    }, timeoutMs);
   });
+
+  const generatePromise = (async () => {
+    let commitMessage = '';
+
+    for await (const message of query({
+      prompt,
+      options: {
+        abortController,
+        maxTurns: 1,
+        allowedTools: []
+      }
+    })) {
+      // Check for abort
+      if (abortController.signal.aborted) {
+        throw new Error('Cancelled');
+      }
+
+      // Extract text from assistant messages
+      if (message.type === 'assistant') {
+        for (const block of message.message.content) {
+          if ('text' in block) {
+            commitMessage += block.text;
+          }
+        }
+      }
+
+      // Handle final result
+      if (message.type === 'result') {
+        if (message.subtype === 'success') {
+          commitMessage = message.result || commitMessage;
+        } else {
+          const errors = message.errors?.join(', ') || 'Unknown error';
+          throw new Error(`Generation failed: ${errors}`);
+        }
+      }
+    }
+
+    return commitMessage.trim();
+  })();
+
+  try {
+    return await Promise.race([generatePromise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 export function deactivate() {}

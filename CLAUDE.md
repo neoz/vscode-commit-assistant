@@ -24,21 +24,22 @@ vsce package
 
 ## Architecture
 
-This is a VS Code extension that generates git commit messages using Claude Code CLI.
+This is a VS Code extension that generates git commit messages using the Claude Agent SDK.
 
 **Flow:**
 1. User clicks sparkle button in SCM view (title bar or input box)
 2. Extension gets staged diff via VS Code Git API (`repo.diff(true)`)
-3. Writes prompt + diff to temp file, pipes to `claude -p --dangerously-skip-permissions`
-4. Parses stdout and inserts result into commit input box
+3. Calls Claude Agent SDK `query()` with prompt + diff
+4. Parses response and inserts result into commit input box
 
 **Key files:**
-- `src/extension.ts` - Single file containing all logic (~120 lines)
+- `src/extension.ts` - Single file containing all logic
 - `package.json` - Extension manifest with command and menu contributions
 
 **Dependencies:**
 - Requires `vscode.git` extension (built-in)
-- Requires `claude` CLI to be installed and in PATH
+- Requires Claude Code to be installed and authenticated (SDK delegates auth to Claude Code runtime)
+- Uses `@anthropic-ai/claude-agent-sdk` for API calls
 
 **Menu locations:**
 - `scm/inputBox` - Proposed API, requires `--enable-proposed-api` flag
