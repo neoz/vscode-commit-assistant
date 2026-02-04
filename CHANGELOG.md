@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.6](https://github.com/neoz/vscode-commit-assistant/compare/v0.0.5...v0.0.6) (2026-02-04)
+
+
+### Features
+
+* **extension:** add split commit detection and staging workflow ([f484907](https://github.com/neoz/vscode-commit-assistant/commit/f484907f5e4aa58c7f1cba02f145d66c15f56c0c))
+
 ### [0.0.5](https://github.com/neoz/vscode-commit-assistant/compare/v0.0.4...v0.0.5) (2026-02-01)
 
 ### [0.0.4](https://github.com/neoz/vscode-commit-assistant/compare/v0.0.3...v0.0.4) (2026-02-01)
