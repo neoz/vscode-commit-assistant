@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
@@ -300,6 +300,36 @@ async function showSplitCommitPicker(
 }
 
 /**
+ * Validate that a file path is safe to use with git commands.
+ * Prevents path traversal and absolute path attacks from AI-generated responses.
+ */
+function isValidRelativePath(filePath: string): boolean {
+  // Reject empty or whitespace-only paths
+  if (!filePath || !filePath.trim()) {
+    return false;
+  }
+
+  // Reject null bytes
+  if (filePath.includes('\0')) {
+    return false;
+  }
+
+  // Reject absolute paths (Unix: /path, Windows: C:\path or C:/path)
+  if (filePath.startsWith('/') || /^[A-Za-z]:/.test(filePath)) {
+    return false;
+  }
+
+  // Reject path traversal sequences
+  const normalized = filePath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  if (parts.some(part => part === '..')) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Unstage all files, then stage only the files for the selected commit
  */
 async function stageFilesForCommit(
@@ -309,19 +339,34 @@ async function stageFilesForCommit(
   const cwd = workspaceRoot.fsPath;
   logDebug('Staging files', { cwd, filesToStage });
 
+  // Validate and filter paths to prevent path traversal attacks
+  const validFiles = filesToStage.filter(f => {
+    if (!isValidRelativePath(f)) {
+      logDebug(`Rejected invalid file path: ${f}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (validFiles.length === 0) {
+    throw new Error('No valid file paths to stage');
+  }
+
+  logDebug('Valid files to stage', { validFiles });
+
   // Step 1: Unstage all currently staged files
   try {
-    execSync('git reset HEAD', { cwd, encoding: 'utf-8', stdio: 'pipe' });
+    execFileSync('git', ['reset', 'HEAD'], { cwd, encoding: 'utf-8', stdio: 'pipe' });
     logDebug('Unstaged all files');
   } catch (err) {
     logDebug('Failed to unstage files (may be initial commit)', err);
   }
 
   // Step 2: Stage only the files for the selected commit
-  for (const relativePath of filesToStage) {
+  for (const relativePath of validFiles) {
     try {
-      // Use -- to separate paths from options
-      execSync(`git add -- "${relativePath}"`, { cwd, encoding: 'utf-8', stdio: 'pipe' });
+      // Use execFileSync to prevent command injection from AI-generated paths
+      execFileSync('git', ['add', '--', relativePath], { cwd, encoding: 'utf-8', stdio: 'pipe' });
       logDebug(`Staged file: ${relativePath}`);
     } catch (err) {
       logDebug(`Failed to stage file: ${relativePath}`, err);
