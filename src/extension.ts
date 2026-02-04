@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { execSync, execFileSync } from 'child_process';
+import { minimatch } from 'minimatch';
 
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
@@ -105,7 +106,22 @@ interface ExtensionConfig {
   timeout: number;
   prompt: string;
   userPrompt: string;
+  excludePatterns: string[];
 }
+
+// Default patterns for sensitive files that should not be sent to AI
+const DEFAULT_EXCLUDE_PATTERNS = [
+  '**/.env*',
+  '**/*.pem',
+  '**/*.key',
+  '**/*.p12',
+  '**/*.pfx',
+  '**/credentials*',
+  '**/secrets*',
+  '**/*secret*',
+  '**/.ssh/*',
+  '**/*.credentials'
+];
 
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('claude-commit');
@@ -114,7 +130,8 @@ function getConfig(): ExtensionConfig {
   return {
     timeout: config.get<number>('timeout', 30000),
     prompt: customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_SYSTEM_PROMPT,
-    userPrompt: customUserPrompt && customUserPrompt.trim() ? customUserPrompt.trim() : DEFAULT_USER_PROMPT
+    userPrompt: customUserPrompt && customUserPrompt.trim() ? customUserPrompt.trim() : DEFAULT_USER_PROMPT,
+    excludePatterns: config.get<string[]>('excludePatterns', DEFAULT_EXCLUDE_PATTERNS)
   };
 }
 
@@ -143,6 +160,23 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    const config = getConfig();
+
+    // Filter out sensitive files before sending to AI
+    const { filteredDiff, excludedFiles } = filterSensitiveDiff(diff, config.excludePatterns);
+
+    if (excludedFiles.length > 0) {
+      logDebug('Excluded sensitive files from diff', { excludedFiles });
+      vscode.window.showWarningMessage(
+        `Excluded ${excludedFiles.length} sensitive file(s): ${excludedFiles.join(', ')}`
+      );
+    }
+
+    if (!filteredDiff.trim()) {
+      vscode.window.showWarningMessage('All staged files were excluded as sensitive. Check excludePatterns setting.');
+      return;
+    }
+
     const abortController = new AbortController();
 
     await vscode.window.withProgress(
@@ -158,8 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          const config = getConfig();
-          const result = await generateCommitMessage(diff, abortController, config);
+          const result = await generateCommitMessage(filteredDiff, abortController, config);
 
           if (token.isCancellationRequested) {
             return;
@@ -327,6 +360,67 @@ function isValidRelativePath(filePath: string): boolean {
   }
 
   return true;
+}
+
+/**
+ * Parse a git diff into sections by file
+ */
+function parseDiffSections(diff: string): Map<string, string> {
+  const sections = new Map<string, string>();
+  const lines = diff.split('\n');
+  let currentFile = '';
+  let currentContent: string[] = [];
+
+  for (const line of lines) {
+    // Match diff header: "diff --git a/path b/path"
+    const diffMatch = line.match(/^diff --git a\/(.+?) b\/(.+?)$/);
+    if (diffMatch) {
+      // Save previous section
+      if (currentFile && currentContent.length > 0) {
+        sections.set(currentFile, currentContent.join('\n'));
+      }
+      currentFile = diffMatch[2]; // Use the "b" path (destination)
+      currentContent = [line];
+    } else if (currentFile) {
+      currentContent.push(line);
+    }
+  }
+
+  // Save last section
+  if (currentFile && currentContent.length > 0) {
+    sections.set(currentFile, currentContent.join('\n'));
+  }
+
+  return sections;
+}
+
+/**
+ * Filter diff to remove sensitive files based on exclude patterns
+ */
+function filterSensitiveDiff(
+  diff: string,
+  excludePatterns: string[]
+): { filteredDiff: string; excludedFiles: string[] } {
+  const sections = parseDiffSections(diff);
+  const excludedFiles: string[] = [];
+  const includedSections: string[] = [];
+
+  for (const [filePath, content] of sections) {
+    const isExcluded = excludePatterns.some(pattern =>
+      minimatch(filePath, pattern, { dot: true })
+    );
+
+    if (isExcluded) {
+      excludedFiles.push(filePath);
+    } else {
+      includedSections.push(content);
+    }
+  }
+
+  return {
+    filteredDiff: includedSections.join('\n'),
+    excludedFiles
+  };
 }
 
 /**
