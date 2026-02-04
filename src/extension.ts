@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { execFileSync } from 'child_process';
 import { minimatch } from 'minimatch';
+import { z } from 'zod';
 
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
@@ -36,17 +37,21 @@ You MUST respond with valid JSON only, no other text:
 // Default user prompt template
 const DEFAULT_USER_PROMPT = 'Analyze this git diff and generate commit message(s):\n\n```diff\n{diff}\n```';
 
-// Response interfaces
-interface CommitSuggestion {
-  message: string;
-  files: string[];
-  reasoning: string;
-}
+// Zod schemas for validating AI response
+const CommitSuggestionSchema = z.object({
+  message: z.string(),
+  files: z.array(z.string()),
+  reasoning: z.string()
+});
 
-interface GenerateResponse {
-  suggest_split: boolean;
-  commits: CommitSuggestion[];
-}
+const GenerateResponseSchema = z.object({
+  suggest_split: z.boolean(),
+  commits: z.array(CommitSuggestionSchema)
+});
+
+// Response interfaces (inferred from schemas)
+type CommitSuggestion = z.infer<typeof CommitSuggestionSchema>;
+type GenerateResponse = z.infer<typeof GenerateResponseSchema>;
 
 /**
  * Extended QuickPickItem for commit suggestions
@@ -62,14 +67,6 @@ interface GenerateResult {
   message: string;
   splitSuggested: boolean;
   commits: CommitSuggestion[];
-}
-
-// Diff file stats for summarization
-interface DiffFileStat {
-  filename: string;
-  additions: number;
-  deletions: number;
-  status: 'added' | 'modified' | 'deleted' | 'renamed';
 }
 
 /**
@@ -283,7 +280,7 @@ function isNotInstalledError(message: string): boolean {
 }
 
 /**
- * Parse the JSON response from Claude
+ * Parse and validate the JSON response from Claude using Zod schema
  */
 function parseCommitResponse(response: string): GenerateResponse | null {
   try {
@@ -296,14 +293,10 @@ function parseCommitResponse(response: string): GenerateResponse | null {
       jsonStr = jsonMatch[1].trim();
     }
 
-    const parsed = JSON.parse(jsonStr) as GenerateResponse;
+    const parsed = JSON.parse(jsonStr);
 
-    // Validate structure
-    if (typeof parsed.suggest_split !== 'boolean' || !Array.isArray(parsed.commits)) {
-      return null;
-    }
-
-    return parsed;
+    // Validate full structure including individual commit objects
+    return GenerateResponseSchema.parse(parsed);
   } catch {
     return null;
   }
