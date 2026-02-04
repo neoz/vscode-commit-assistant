@@ -5,12 +5,8 @@ import { execSync } from 'child_process';
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
 
-// Constants for diff size limits
-const LARGE_DIFF_LINES = 300;
-const MAX_DIFF_CHARS = 50000;
-
-// System prompt for commit message generation
-const SYSTEM_PROMPT = `You are a Git commit message generator. Analyze the provided diff and generate commit messages following Conventional Commits specification.
+// Default system prompt for commit message generation
+const DEFAULT_SYSTEM_PROMPT = `You are a Git commit message generator. Analyze the provided diff and generate commit messages following Conventional Commits specification.
 
 ## Rules
 1. Format: <type>(<scope>): <description>
@@ -35,6 +31,9 @@ You MUST respond with valid JSON only, no other text:
     }
   ]
 }`;
+
+// Default user prompt template
+const DEFAULT_USER_PROMPT = 'Analyze this git diff and generate commit message(s):\n\n```diff\n{diff}\n```';
 
 // Response interfaces
 interface CommitSuggestion {
@@ -102,6 +101,23 @@ interface Repository {
   rootUri: vscode.Uri;
 }
 
+interface ExtensionConfig {
+  timeout: number;
+  prompt: string;
+  userPrompt: string;
+}
+
+function getConfig(): ExtensionConfig {
+  const config = vscode.workspace.getConfiguration('claude-commit');
+  const customPrompt = config.get<string>('prompt', '');
+  const customUserPrompt = config.get<string>('userPrompt', '');
+  return {
+    timeout: config.get<number>('timeout', 30000),
+    prompt: customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_SYSTEM_PROMPT,
+    userPrompt: customUserPrompt && customUserPrompt.trim() ? customUserPrompt.trim() : DEFAULT_USER_PROMPT
+  };
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // Initialize output channel for debug logging
   outputChannel = vscode.window.createOutputChannel('Claude Commit Assistant');
@@ -142,7 +158,8 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          const result = await generateCommitMessage(diff, abortController);
+          const config = getConfig();
+          const result = await generateCommitMessage(diff, abortController, config);
 
           if (token.isCancellationRequested) {
             return;
@@ -353,23 +370,23 @@ async function handleSplitCommit(
 
 async function generateCommitMessage(
   diff: string,
-  abortController: AbortController
+  abortController: AbortController,
+  config: ExtensionConfig
 ): Promise<GenerateResult> {
-  // Determine if diff is large and prepare appropriate prompt
-  let userPrompt: string;
-  userPrompt = `Analyze this git diff and generate commit message(s):\n\n\`\`\`diff\n${diff}\n\`\`\``;
+  // Build user prompt with diff placeholder
+  const userPrompt = config.userPrompt.replace('{diff}', diff);
 
   // Combine system prompt and user prompt
-  const prompt = `${SYSTEM_PROMPT}\n\n---\n\n${userPrompt}`;
+  const prompt = `${config.prompt}\n\n---\n\n${userPrompt}`;
 
-  // Set up timeout (30 seconds)
-  const timeoutMs = 30000;
+  // Set up timeout from config
+  const timeoutMs = config.timeout;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       abortController.abort();
-      reject(new Error('Request timed out after 30 seconds'));
+      reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
     }, timeoutMs);
   });
 

@@ -46,15 +46,24 @@
     "configuration": {
       "title": "Claude Commit",
       "properties": {
-        "claude-commit.maxDiffLength": {
+        "claude-commit.timeout": {
           "type": "number",
-          "default": 10000,
-          "description": "Maximum character length of diff to send to Claude. Larger diffs will be truncated."
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 120000,
+          "description": "Timeout in milliseconds for commit message generation (default: 30000)"
         },
-        "claude-commit.promptTemplate": {
+        "claude-commit.prompt": {
           "type": "string",
-          "default": "Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.",
-          "description": "Prompt template for generating commit messages. The diff will be appended after this prompt."
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Custom system prompt for commit message generation. Leave empty to use the default prompt."
+        },
+        "claude-commit.userPrompt": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Custom user prompt template. Use {diff} as placeholder for the diff content. Leave empty to use default."
         }
       }
     }
