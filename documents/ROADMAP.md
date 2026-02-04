@@ -8,12 +8,12 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 18 items |
+| **Done** | 21 items |
 | **Now** | 0 items |
-| **Next** | 4 items |
-| **Later** | 5 items |
+| **Next** | 3 items |
+| **Later** | 4 items |
 
-**Current Version**: 0.0.6
+**Current Version**: 0.0.7 (in development)
 
 ---
 
@@ -61,6 +61,9 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
+| **Configurable timeout** | User can adjust timeout for slow network conditions | 0.0.7 | **Done** |
+| **Configurable system prompt** | User can customize the system prompt for different conventions | 0.0.7 | **Done** |
+| **Configurable user prompt** | User can customize how diff is presented to Claude | 0.0.7 | **Done** |
 | **Split commit detection** | Detect unrelated changes and suggest splitting into multiple commits | 0.0.5 | **Done** |
 | **Smart staging workflow** | QuickPick UI to select a commit; auto-stage only relevant files | 0.0.5 | **Done** |
 | **Claude Agent SDK migration** | Replace CLI spawning with `@anthropic-ai/claude-agent-sdk` | 0.0.4 | **Done** |
@@ -75,8 +78,6 @@ Items shipped in previous releases.
 | Error handling: no git repo | Error when no repository found | 0.0.1 | **Done** |
 | 60-second timeout | Graceful timeout for unresponsive Claude | 0.0.1 | **Done** |
 | Cross-platform support | Windows, macOS, and Linux compatibility | 0.0.1 | **Done** |
-| Configurable prompt template | User can customize the generation prompt | 0.0.2 | **Done** |
-| Configurable max diff length | User can limit diff size sent to Claude | 0.0.2 | **Done** |
 | Automated release workflow | CI/CD for marketplace publishing | 0.0.3 | **Done** |
 | Repository metadata | Correct GitHub URL and package info | 0.0.3 | **Done** |
 
@@ -128,6 +129,7 @@ Items shipped in previous releases.
 | **0.0.4** | **SDK Migration** | Claude Agent SDK, cancellable generation, improved errors, 30s timeout | **Done** |
 | **0.0.5** | **Split Detection** | Split commit detection, staging workflow | **Done** |
 | **0.0.6** | **Refinements** | Bug fixes, dependency updates | **Done** |
+| **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **In Progress** |
 | 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Planned** |
 | 1.1.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
 | 1.2.0 | Power Users | Multi-repo support, commit body support | **Planned** |
@@ -136,6 +138,24 @@ Items shipped in previous releases.
 ---
 
 ## Changes This Update
+
+### v0.0.7 Release (2026-02-04)
+
+**Items Completed:**
+- Configurable timeout (P1)
+- Configurable system prompt (P1)
+- Configurable user prompt (P1)
+
+**Architecture Changes:**
+- Added `ExtensionConfig` interface with `timeout`, `prompt`, `userPrompt`
+- Added `getConfig()` function to read VS Code settings
+- Config values are now passed to `generateCommitMessage()`
+- Removed unused `maxDiffLength` and old `promptTemplate` settings
+
+**Configuration Options:**
+- `claude-commit.timeout`: Timeout in ms (5000-120000, default 30000)
+- `claude-commit.prompt`: Custom system prompt (empty = use default)
+- `claude-commit.userPrompt`: Custom user prompt with `{diff}` placeholder
 
 ### v0.0.6 Release (2026-02-04)
 

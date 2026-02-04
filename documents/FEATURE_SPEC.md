@@ -54,9 +54,11 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 - **As a developer**, I want the extension to automatically stage only the relevant files for my selected commit so that I don't have to manually unstage/stage files.
 
 ### Configuration
-- **As a developer**, I want to customize the prompt template so that I can adjust the style of generated messages to my team's conventions.
+- **As a developer**, I want to customize the system prompt so that I can adjust the style of generated messages to my team's conventions.
 
-- **As a developer**, I want to limit the diff size sent to Claude so that I can control token usage for very large changesets.
+- **As a developer**, I want to customize the user prompt template so that I can control how the diff is presented to Claude.
+
+- **As a developer**, I want to configure the timeout so that I can adjust for slow network conditions.
 
 ### Error Handling
 - **As a developer**, I want a clear error message when no changes are staged so that I understand why generation did not start.
@@ -95,8 +97,9 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 | Requirement | Rationale | Status |
 |-------------|-----------|--------|
-| Configurable prompt template | Teams have different commit message conventions | **Done** (v0.0.2) |
-| Configurable max diff length | Large diffs may exceed token limits or slow generation | **Done** (v0.0.2) |
+| Configurable timeout | Users with slow connections may need longer timeout | **Done** (v0.0.7) |
+| Configurable system prompt | Teams have different commit message conventions | **Done** (v0.0.7) |
+| Configurable user prompt | Customize how diff is presented to Claude | **Done** (v0.0.7) |
 | Model selection | Allow users to choose Claude model for cost/quality tradeoff | Not Started |
 | Multi-repository support | Power users work with monorepos or multiple repos | Not Started |
 | Token usage display | Show token count after generation for cost awareness | Not Started |
@@ -216,25 +219,28 @@ async function generateCommitMessage(diff: string, abortController: AbortControl
 }
 ```
 
-### Configuration Schema (Updated)
+### Configuration Schema (v0.0.7)
 
 ```json
 {
-  "claude-commit.maxDiffLength": {
+  "claude-commit.timeout": {
     "type": "number",
-    "default": 10000,
-    "description": "Maximum character length of diff to send to Claude"
+    "default": 30000,
+    "minimum": 5000,
+    "maximum": 120000,
+    "description": "Timeout in milliseconds for commit message generation"
   },
-  "claude-commit.promptTemplate": {
+  "claude-commit.prompt": {
     "type": "string",
-    "default": "Generate a conventional commit message for this diff. Output ONLY the commit message (format: type(scope): description). No explanation.",
-    "description": "Prompt template for generating commit messages"
+    "default": "",
+    "editPresentation": "multilineText",
+    "description": "Custom system prompt for commit message generation. Leave empty to use default."
   },
-  "claude-commit.model": {
+  "claude-commit.userPrompt": {
     "type": "string",
-    "default": "claude-sonnet-4-5-20250929",
-    "enum": ["claude-sonnet-4-5-20250929", "claude-haiku-3-5-20241022"],
-    "description": "Claude model to use for generation (P1 feature)"
+    "default": "",
+    "editPresentation": "multilineText",
+    "description": "Custom user prompt template. Use {diff} as placeholder. Leave empty to use default."
   }
 }
 ```
