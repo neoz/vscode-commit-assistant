@@ -1,6 +1,6 @@
 # Product Roadmap: Claude Commit Message Generator
 
-> Last updated: 2026-02-01
+> Last updated: 2026-02-04
 
 ---
 
@@ -8,12 +8,12 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 16 items |
+| **Done** | 18 items |
 | **Now** | 0 items |
 | **Next** | 4 items |
 | **Later** | 5 items |
 
-**Current Version**: 0.0.4
+**Current Version**: 0.0.6
 
 ---
 
@@ -48,9 +48,10 @@ Items on the horizon but not yet prioritized for active development.
 |------|-------------|--------|----------|
 | Commit message body support | Option to generate multi-line commit messages with subject + body | **Not Started** | P1 |
 | Streaming response | Show message as it generates for perceived speed | **Not Started** | P2 |
-| Multiple message suggestions | Generate 2-3 options and let user pick their preferred message | **Not Started** | P2 |
 | PR description generation | Extend to generate GitHub/GitLab pull request descriptions | **Not Started** | P2 |
 | Smart diff summarization | For large diffs, summarize file-level changes before sending to Claude | **Not Started** | P2 |
+
+> **Note:** "Multiple message suggestions" has been effectively delivered via the split commit detection feature (v0.0.5), which presents multiple commit options when appropriate.
 
 ---
 
@@ -60,6 +61,8 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
+| **Split commit detection** | Detect unrelated changes and suggest splitting into multiple commits | 0.0.5 | **Done** |
+| **Smart staging workflow** | QuickPick UI to select a commit; auto-stage only relevant files | 0.0.5 | **Done** |
 | **Claude Agent SDK migration** | Replace CLI spawning with `@anthropic-ai/claude-agent-sdk` | 0.0.4 | **Done** |
 | **Cancellable generation** | Users can abort generation via progress dialog cancel button | 0.0.4 | **Done** |
 | **Improved error messages** | Auto-detect auth/installation issues with actionable guidance | 0.0.4 | **Done** |
@@ -123,14 +126,41 @@ Items shipped in previous releases.
 | Version | Theme | Key Items | Status |
 |---------|-------|-----------|--------|
 | **0.0.4** | **SDK Migration** | Claude Agent SDK, cancellable generation, improved errors, 30s timeout | **Done** |
-| 1.0.0 | Stable Release | Version bump for marketplace, no new features | **Planned** |
+| **0.0.5** | **Split Detection** | Split commit detection, staging workflow | **Done** |
+| **0.0.6** | **Refinements** | Bug fixes, dependency updates | **Done** |
+| 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Planned** |
 | 1.1.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
 | 1.2.0 | Power Users | Multi-repo support, commit body support | **Planned** |
-| 2.0.0 | Enhanced UX | Streaming response, multiple suggestions, smart diff summarization | **Planned** |
+| 2.0.0 | Enhanced UX | Streaming response, smart diff summarization | **Planned** |
 
 ---
 
 ## Changes This Update
+
+### v0.0.6 Release (2026-02-04)
+
+**Items Completed:**
+- Split commit detection (P0)
+- Smart staging workflow (P0)
+
+**Architecture Changes:**
+- Added JSON-based response format with structured commit suggestions
+- Added `GenerateResponse` interface with `suggest_split` and `commits` array
+- Each commit includes `message`, `files`, and `reasoning` fields
+- Added QuickPick UI for selecting from multiple commit suggestions
+- Added `stageFilesForCommit()` to handle selective staging
+
+**User-Facing Improvements:**
+- When staging unrelated changes, Claude now suggests splitting into atomic commits
+- QuickPick menu displays each suggested commit with file count and list
+- Selecting a commit automatically unstages all files and re-stages only relevant ones
+- Debug logging in "Claude Commit Assistant" output channel
+
+### v0.0.5 Release (2026-02-03)
+
+**Items Completed:**
+- Initial split commit detection implementation
+- Staging workflow foundation
 
 ### v0.0.4 Release (2026-02-01)
 
@@ -159,13 +189,15 @@ Items shipped in previous releases.
 
 ### What Changes for Users
 
-| Aspect | Before (v0.x) | After (v0.0.4+) |
-|--------|---------------|-----------------|
+| Aspect | Before (v0.0.3) | After (v0.0.6) |
+|--------|-----------------|----------------|
 | Claude Code requirement | CLI must be in PATH | Same (SDK uses Claude Code runtime) |
 | Generation speed | ~5-10 seconds | ~2-5 seconds (no process spawn) |
 | Cancellation | Not supported | Supported via progress dialog |
 | Timeout | 60 seconds | 30 seconds |
 | Error messages | Generic CLI errors | Specific, actionable messages |
+| Split detection | Not supported | Auto-detects unrelated changes |
+| Staging workflow | Manual | Auto-stages files for selected commit |
 
 ### Breaking Changes
 

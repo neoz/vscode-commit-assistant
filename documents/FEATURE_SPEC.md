@@ -46,6 +46,13 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 - **As a developer**, I want generation to be faster and more reliable than CLI spawning so that my workflow is not interrupted.
 
+### Split Commit Flow
+- **As a developer**, I want Claude to detect when I have unrelated changes staged so that I can split them into atomic commits.
+
+- **As a developer**, I want to pick from suggested commits via a QuickPick menu so that I can choose which commit to make first.
+
+- **As a developer**, I want the extension to automatically stage only the relevant files for my selected commit so that I don't have to manually unstage/stage files.
+
 ### Configuration
 - **As a developer**, I want to customize the prompt template so that I can adjust the style of generated messages to my team's conventions.
 
@@ -64,7 +71,7 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 ## 5. Requirements
 
-### Must-Have (P0) - **All Completed in v0.0.4**
+### Must-Have (P0) - **All Completed in v0.0.6**
 
 | Requirement | Acceptance Criteria | Status |
 |-------------|---------------------|--------|
@@ -81,16 +88,18 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Error handling: API errors | Clear messages for rate limits, network errors, authentication failures | **Done** |
 | 30-second timeout | Generation aborts with timeout message after 30 seconds | **Done** |
 | Cross-platform support | Works on Windows, macOS, and Linux | **Done** |
+| Split commit detection | When diff contains unrelated changes, suggest splitting into multiple commits | **Done** |
+| Smart staging workflow | QuickPick UI to select a commit; auto-stage only relevant files | **Done** |
 
 ### Nice-to-Have (P1)
 
-| Requirement | Rationale |
-|-------------|-----------|
-| Configurable prompt template | Teams have different commit message conventions |
-| Configurable max diff length | Large diffs may exceed token limits or slow generation |
-| Model selection | Allow users to choose Claude model for cost/quality tradeoff |
-| Multi-repository support | Power users work with monorepos or multiple repos |
-| Token usage display | Show token count after generation for cost awareness |
+| Requirement | Rationale | Status |
+|-------------|-----------|--------|
+| Configurable prompt template | Teams have different commit message conventions | **Done** (v0.0.2) |
+| Configurable max diff length | Large diffs may exceed token limits or slow generation | **Done** (v0.0.2) |
+| Model selection | Allow users to choose Claude model for cost/quality tradeoff | Not Started |
+| Multi-repository support | Power users work with monorepos or multiple repos | Not Started |
+| Token usage display | Show token count after generation for cost awareness | Not Started |
 
 ### Future Considerations (P2)
 
@@ -147,34 +156,16 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 ## 9. Technical Architecture
 
-### Current Architecture (CLI-based, v0.x)
+### Current Architecture (SDK-based, v0.0.6)
 
 ```
 [User clicks sparkle]
     -> [Get staged diff via vscode.git API]
-    -> [Write prompt + diff to temp file]
-    -> [Spawn: cmd /c type file | claude -p (Windows)]
-    -> [Spawn: sh -c cat file | claude -p (Unix)]
-    -> [Parse stdout]
-    -> [Insert into repo.inputBox.value]
-```
-
-**Issues with CLI approach**:
-- Process spawning overhead
-- Platform-specific shell commands
-- Temp file management
-- Limited error handling from CLI output
-- No cancellation support
-
-### New Architecture (SDK-based, v1.0)
-
-```
-[User clicks sparkle]
-    -> [Get staged diff via vscode.git API]
-    -> [Create Claude Agent SDK session]
-    -> [Send prompt + diff via SDK]
-    -> [Receive response]
-    -> [Insert into repo.inputBox.value]
+    -> [Build prompt with system instructions + diff]
+    -> [Call Claude Agent SDK query()]
+    -> [Parse JSON response]
+    -> [If split suggested: show QuickPick -> stage selected files]
+    -> [Insert message into repo.inputBox.value]
 ```
 
 **Benefits of SDK approach**:
@@ -184,27 +175,44 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 - AbortController support for cancellation
 - Cleaner async/await flow
 
+### JSON Response Format
+
+The extension now uses a structured JSON response format for better parsing and split detection:
+
+```json
+{
+  "suggest_split": boolean,
+  "commits": [
+    {
+      "message": "feat(auth): add JWT token validation",
+      "files": ["src/auth/jwt.ts"],
+      "reasoning": "Brief explanation for logging"
+    }
+  ]
+}
+```
+
 ### SDK Integration
 
 ```typescript
-import { Claude } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
-async function generateCommitMessage(diff: string): Promise<string> {
-  const claude = new Claude({
-    // SDK uses Claude Code runtime for auth
-  });
+async function generateCommitMessage(diff: string, abortController: AbortController): Promise<GenerateResult> {
+  const claudePath = findClaudeExecutable();
 
-  const abortController = new AbortController();
+  for await (const message of query({
+    prompt,
+    options: {
+      abortController,
+      maxTurns: 1,
+      allowedTools: [],
+      pathToClaudeCodeExecutable: claudePath
+    }
+  })) {
+    // Process streaming response
+  }
 
-  // Store for cancellation
-  currentAbortController = abortController;
-
-  const response = await claude.message({
-    prompt: `${promptTemplate}\n\n${truncatedDiff}`,
-    signal: abortController.signal,
-  });
-
-  return response.text;
+  return { message, splitSuggested, commits };
 }
 ```
 
