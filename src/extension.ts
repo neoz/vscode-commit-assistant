@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { minimatch } from 'minimatch';
 
 // Output channel for debug logging
@@ -78,8 +78,8 @@ interface DiffFileStat {
 function findClaudeExecutable(): string | undefined {
   try {
     const isWindows = process.platform === 'win32';
-    const command = isWindows ? 'where claude' : 'which claude';
-    const result = execSync(command, { encoding: 'utf-8' }).trim();
+    const cmd = isWindows ? 'where' : 'which';
+    const result = execFileSync(cmd, ['claude'], { encoding: 'utf-8' }).trim();
     // 'where' on Windows may return multiple lines, take the first
     const firstPath = result.split('\n')[0].trim();
     return firstPath || undefined;
@@ -125,13 +125,25 @@ const DEFAULT_EXCLUDE_PATTERNS = [
 
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('claude-commit');
-  const customPrompt = config.get<string>('prompt', '');
-  const customUserPrompt = config.get<string>('userPrompt', '');
+
+  // Read prompts only from user settings (not workspace) to prevent prompt injection attacks.
+  // Malicious repos could include .vscode/settings.json with attacker-controlled prompts.
+  const inspectedPrompt = config.inspect<string>('prompt');
+  const inspectedUserPrompt = config.inspect<string>('userPrompt');
+  const inspectedExcludePatterns = config.inspect<string[]>('excludePatterns');
+
+  const customPrompt = inspectedPrompt?.globalValue || '';
+  const customUserPrompt = inspectedUserPrompt?.globalValue || '';
+  // For excludePatterns, use user setting if set, otherwise use defaults.
+  // Never allow workspace settings to reduce security protections.
+  const excludePatterns = inspectedExcludePatterns?.globalValue ?? DEFAULT_EXCLUDE_PATTERNS;
+
   return {
+    // timeout is safe to read from workspace (low risk)
     timeout: config.get<number>('timeout', 30000),
-    prompt: customPrompt && customPrompt.trim() ? customPrompt.trim() : DEFAULT_SYSTEM_PROMPT,
-    userPrompt: customUserPrompt && customUserPrompt.trim() ? customUserPrompt.trim() : DEFAULT_USER_PROMPT,
-    excludePatterns: config.get<string[]>('excludePatterns', DEFAULT_EXCLUDE_PATTERNS)
+    prompt: customPrompt.trim() || DEFAULT_SYSTEM_PROMPT,
+    userPrompt: customUserPrompt.trim() || DEFAULT_USER_PROMPT,
+    excludePatterns
   };
 }
 
