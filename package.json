@@ -3,7 +3,7 @@
   "publisher": "neoz",
   "displayName": "Claude Commit Message",
   "description": "Generate commit messages using Claude Code",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/neoz/vscode-commit-assistant.git"
@@ -86,7 +86,10 @@
         },
         "claude-commit.provider": {
           "type": "string",
-          "enum": ["claude", "vscode-lm"],
+          "enum": [
+            "claude",
+            "vscode-lm"
+          ],
           "enumDescriptions": [
             "Use Claude Code CLI (requires Claude Code installation)",
             "Use VS Code Language Model API (requires GitHub Copilot or compatible provider)"

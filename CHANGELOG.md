@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.1.0](https://github.com/neoz/vscode-commit-assistant/compare/v1.0.0...v1.1.0) (2026-02-05)
+
+
+### Features
+
+* add multi-provider support with VS Code Language Model API ([2a21c5f](https://github.com/neoz/vscode-commit-assistant/commit/2a21c5f2b67465da7bfaccc239392071edff3ad7))
+
 ## [1.0.0](https://github.com/neoz/vscode-commit-assistant/compare/v0.0.6...v1.0.0) (2026-02-05)
 
 
