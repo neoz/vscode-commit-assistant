@@ -1,6 +1,6 @@
 # Product Roadmap: Claude Commit Message Generator
 
-> Last updated: 2026-02-04
+> Last updated: 2026-02-05
 
 ---
 
@@ -10,7 +10,7 @@
 |--------|-------|
 | **Done** | 21 items |
 | **Now** | 0 items |
-| **Next** | 3 items |
+| **Next** | 5 items |
 | **Later** | 4 items |
 
 **Current Version**: 0.0.7 (in development)
@@ -33,10 +33,12 @@ Items planned for the next development cycle.
 
 | Item | Description | Status | Priority |
 |------|-------------|--------|----------|
+| GitHub Copilot Agent SDK support | Add GitHub Copilot as an alternative AI backend; user can configure provider in settings (Claude remains default) | **Not Started** | P1 |
+| Provider abstraction layer | Create unified interface for AI providers to enable seamless switching between Claude and Copilot | **Not Started** | P1 |
 | Model selection | Allow users to choose Claude model (Haiku for speed, Sonnet for quality) | **Not Started** | P1 |
 | Keyboard shortcut | Add default keybinding (e.g., `Ctrl+Shift+G`) to trigger generation | **Not Started** | P1 |
 | Token usage display | Show token count after generation for cost awareness | **Not Started** | P1 |
-| Multi-repository support | Support workspaces with multiple git repos; let user pick which repo | **Not Started** | P1 |
+| Multi-repository support | Support workspaces with multiple git repos; let user pick which repo | **Not Started** | P2 |
 
 ---
 
@@ -91,6 +93,7 @@ Items shipped in previous releases.
 |------------|--------|------------|
 | Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) | Core generation functionality depends on SDK | Pin to stable version; monitor releases |
 | Claude Code runtime | SDK delegates auth to Claude Code; must be installed | Document installation clearly in README |
+| GitHub Copilot Agent SDK | Alternative AI provider for commit generation | Monitor GitHub Copilot API changes; maintain as optional dependency |
 | VS Code Proposed API (`scm/inputBox`) | Optimal UX requires enabling proposed API | Fallback to stable `scm/title` API works without flag |
 
 ### Risks
@@ -99,6 +102,8 @@ Items shipped in previous releases.
 |------|------------|--------|------------|
 | SDK API breaking changes | Low | High | Pin to known-good SDK version; test with new versions |
 | Claude Code auth changes | Low | Medium | Monitor Claude Code releases; update error handling |
+| GitHub Copilot API changes | Medium | Medium | Abstract provider interface to isolate changes; monitor GitHub releases |
+| Multi-provider maintenance burden | Medium | Medium | Unified interface design; comprehensive test coverage for both providers |
 | VS Code API deprecation | Low | Medium | Monitor VS Code release notes; proposed API may become stable |
 | Large diff token limits | Medium | Medium | Already implemented truncation; smart summarization planned |
 
@@ -109,16 +114,18 @@ Items shipped in previous releases.
 **Now items**: v1.0.0 complete - SDK migration shipped with cancellation, better errors, and faster timeout.
 
 **Next items** were selected based on:
+- Provider flexibility (GitHub Copilot support for users without Claude Code)
+- Architecture foundation (provider abstraction enables future AI backends)
 - User control (model selection for cost/quality tradeoff)
 - Discoverability (keyboard shortcut)
 - Transparency (token usage display)
-- Power user needs (multi-repo support)
 
 **Later items** are deferred because:
 - Lower priority than core improvements (commit body support)
 - Require SDK features to be stable first (streaming)
 - Require significant new UI (multiple suggestions)
 - Separate feature scope (PR descriptions)
+- Multi-repo deprioritized in favor of provider support
 
 ---
 
@@ -131,13 +138,90 @@ Items shipped in previous releases.
 | **0.0.6** | **Refinements** | Bug fixes, dependency updates | **Done** |
 | **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **In Progress** |
 | 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Planned** |
-| 1.1.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
-| 1.2.0 | Power Users | Multi-repo support, commit body support | **Planned** |
+| 1.1.0 | Multi-Provider | GitHub Copilot Agent SDK support, provider abstraction layer | **Planned** |
+| 1.2.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
+| 1.3.0 | Power Users | Multi-repo support, commit body support | **Planned** |
 | 2.0.0 | Enhanced UX | Streaming response, smart diff summarization | **Planned** |
 
 ---
 
+## GitHub Copilot Agent SDK Integration Plan
+
+### Overview
+
+Add GitHub Copilot as an alternative AI provider for commit message generation. Users can configure their preferred provider in VS Code settings, with Claude remaining the default for backward compatibility.
+
+### Configuration Schema
+
+```json
+{
+  "claude-commit.provider": {
+    "type": "string",
+    "enum": ["claude", "copilot"],
+    "default": "claude",
+    "description": "AI provider for commit message generation"
+  },
+  "claude-commit.copilot.model": {
+    "type": "string",
+    "default": "gpt-4",
+    "description": "Model to use when Copilot provider is selected"
+  }
+}
+```
+
+### Architecture Changes
+
+1. **Provider Interface**: Create `ICommitMessageProvider` interface with `generate(diff: string, config: ExtensionConfig): Promise<GenerateResult>`
+
+2. **Provider Implementations**:
+   - `ClaudeProvider`: Current implementation using Claude Agent SDK
+   - `CopilotProvider`: New implementation using GitHub Copilot Agent SDK
+
+3. **Provider Factory**: `getProvider(config: ExtensionConfig): ICommitMessageProvider` to instantiate the correct provider
+
+### Dependencies
+
+| Package | Purpose | Notes |
+|---------|---------|-------|
+| `@anthropic-ai/claude-agent-sdk` | Claude provider (existing) | Already bundled |
+| GitHub Copilot Agent SDK | Copilot provider (new) | TBD - verify package name and availability |
+
+### User Experience
+
+- Default behavior unchanged (Claude)
+- Users with GitHub Copilot subscription can switch to Copilot provider
+- Error messages guide users to install/authenticate required provider
+- Provider-specific model selection (Haiku/Sonnet for Claude, GPT models for Copilot)
+
+### Migration Path
+
+1. No breaking changes for existing users
+2. New users can choose their preferred provider during setup
+3. Documentation updated to cover both providers
+
+---
+
 ## Changes This Update
+
+### Roadmap Update (2026-02-05)
+
+**New Items Added:**
+- GitHub Copilot Agent SDK support (P1, Next)
+- Provider abstraction layer (P1, Next)
+
+**Reprioritized:**
+- Multi-repository support moved from P1 to P2 (deferred in favor of provider support)
+
+**New Dependencies:**
+- GitHub Copilot Agent SDK (optional, for Copilot provider)
+
+**New Risks:**
+- GitHub Copilot API changes
+- Multi-provider maintenance burden
+
+**Version Planning Updated:**
+- v1.1.0 now focused on Multi-Provider theme
+- Subsequent versions shifted accordingly
 
 ### v0.0.7 Release (2026-02-04)
 
