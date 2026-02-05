@@ -24,23 +24,44 @@ vsce package
 
 ## Architecture
 
-This is a VS Code extension that generates git commit messages using the Claude Agent SDK.
+This is a VS Code extension that generates git commit messages using AI providers (Claude or VS Code Language Models).
+
+**File Structure:**
+- `src/extension.ts` - VS Code integration, commands, UI, configuration
+- `src/providers.ts` - Provider interface, ClaudeProvider, VSCodeLMProvider
 
 **Flow:**
 1. User clicks sparkle button in SCM view (title bar or input box)
-2. Extension gets staged diff via VS Code Git API (`repo.diff(true)`)
-3. Calls Claude Agent SDK `query()` with prompt + diff
-4. Parses response and inserts result into commit input box
+2. Extension loads config (provider, model, prompts)
+3. Creates provider via `createProvider(type, model)`
+4. Checks `provider.isAvailable()` - shows error if unavailable
+5. Gets staged diff via VS Code Git API (`repo.diff(true)`)
+6. Filters sensitive files based on exclude patterns
+7. Calls `provider.generateCommitMessage()` with prompt + diff
+8. Parses JSON response via Zod schemas
+9. If split suggested: shows QuickPick, stages selected files
+10. Inserts message into commit input box
 
-**Key files:**
-- `src/extension.ts` - Single file containing all logic
-- `package.json` - Extension manifest with command and menu contributions
+**Providers:**
+- `ClaudeProvider` - Uses Claude Agent SDK, requires Claude Code CLI
+- `VSCodeLMProvider` - Uses VS Code Language Model API (GitHub Copilot, etc.)
 
-**Dependencies:**
-- Requires `vscode.git` extension (built-in)
-- Requires Claude Code to be installed and authenticated (SDK delegates auth to Claude Code runtime)
-- Uses `@anthropic-ai/claude-agent-sdk` for API calls
+**Key Dependencies:**
+- `vscode.git` extension (built-in)
+- `@anthropic-ai/claude-agent-sdk` (bundled, for Claude provider)
+- `vscode.lm` API (built-in VS Code 1.85+, for VS Code LM provider)
 
 **Menu locations:**
 - `scm/inputBox` - Proposed API, requires `--enable-proposed-api` flag
 - `scm/title` - Stable fallback in SCM header bar
+
+## Configuration
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `claude-commit.provider` | AI provider (`claude` or `vscode-lm`) | `claude` |
+| `claude-commit.model` | Model (haiku/sonnet/opus or LM family) | `haiku` |
+| `claude-commit.timeout` | Timeout in ms (5000-120000) | `30000` |
+| `claude-commit.prompt` | Custom system prompt | (default prompt) |
+| `claude-commit.userPrompt` | Custom user prompt with `{diff}` placeholder | (default prompt) |
+| `claude-commit.excludePatterns` | Glob patterns for sensitive files | (env, keys, etc.) |
