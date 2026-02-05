@@ -1,8 +1,14 @@
 import * as vscode from 'vscode';
-import { query } from '@anthropic-ai/claude-agent-sdk';
 import { execFileSync } from 'child_process';
 import { minimatch } from 'minimatch';
-import { z } from 'zod';
+import {
+  CommitProvider,
+  CommitSuggestion,
+  GenerateResult,
+  ProviderConfig,
+  ProviderType,
+  createProvider
+} from './providers';
 
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
@@ -37,52 +43,11 @@ You MUST respond with valid JSON only, no other text:
 // Default user prompt template
 const DEFAULT_USER_PROMPT = 'Analyze this git diff and generate commit message(s):\n\n```diff\n{diff}\n```';
 
-// Zod schemas for validating AI response
-const CommitSuggestionSchema = z.object({
-  message: z.string(),
-  files: z.array(z.string()),
-  reasoning: z.string()
-});
-
-const GenerateResponseSchema = z.object({
-  suggest_split: z.boolean(),
-  commits: z.array(CommitSuggestionSchema)
-});
-
-// Response interfaces (inferred from schemas)
-type CommitSuggestion = z.infer<typeof CommitSuggestionSchema>;
-type GenerateResponse = z.infer<typeof GenerateResponseSchema>;
-
 /**
  * Extended QuickPickItem for commit suggestions
  */
 interface CommitQuickPickItem extends vscode.QuickPickItem {
   commit: CommitSuggestion;
-}
-
-/**
- * Result from generateCommitMessage function
- */
-interface GenerateResult {
-  message: string;
-  splitSuggested: boolean;
-  commits: CommitSuggestion[];
-}
-
-/**
- * Find the path to the Claude Code executable
- */
-function findClaudeExecutable(): string | undefined {
-  try {
-    const isWindows = process.platform === 'win32';
-    const cmd = isWindows ? 'where' : 'which';
-    const result = execFileSync(cmd, ['claude'], { encoding: 'utf-8' }).trim();
-    // 'where' on Windows may return multiple lines, take the first
-    const firstPath = result.split('\n')[0].trim();
-    return firstPath || undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 interface GitExtension {
@@ -104,6 +69,8 @@ interface ExtensionConfig {
   prompt: string;
   userPrompt: string;
   excludePatterns: string[];
+  provider: ProviderType;
+  model: string;
 }
 
 // Default patterns for sensitive files that should not be sent to AI
@@ -140,7 +107,10 @@ function getConfig(): ExtensionConfig {
     timeout: config.get<number>('timeout', 30000),
     prompt: customPrompt.trim() || DEFAULT_SYSTEM_PROMPT,
     userPrompt: customUserPrompt.trim() || DEFAULT_USER_PROMPT,
-    excludePatterns
+    excludePatterns,
+    // Provider settings (safe to read from workspace)
+    provider: config.get<ProviderType>('provider', 'claude'),
+    model: config.get<string>('model', 'haiku')
   };
 }
 
@@ -186,12 +156,30 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    // Create provider based on config
+    const provider = createProvider(config.provider, config.model);
+
+    // Check provider availability
+    const isAvailable = await provider.isAvailable();
+    if (!isAvailable) {
+      if (config.provider === 'claude') {
+        vscode.window.showErrorMessage(
+          'Claude Code CLI is not installed or not found in PATH. Install from https://claude.ai/code'
+        );
+      } else {
+        vscode.window.showErrorMessage(
+          'VS Code Language Model is not available. Install GitHub Copilot or another LM provider.'
+        );
+      }
+      return;
+    }
+
     const abortController = new AbortController();
 
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: 'Generating commit message with Claude...',
+        title: `Generating commit message with ${provider.name}...`,
         cancellable: true
       },
       async (_progress, token) => {
@@ -201,7 +189,18 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          const result = await generateCommitMessage(filteredDiff, abortController, config);
+          const providerConfig: ProviderConfig = {
+            timeout: config.timeout,
+            systemPrompt: config.prompt,
+            userPrompt: config.userPrompt
+          };
+
+          const result = await provider.generateCommitMessage(
+            filteredDiff,
+            abortController,
+            providerConfig,
+            logDebug
+          );
 
           if (token.isCancellationRequested) {
             return;
@@ -225,16 +224,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           const errorMsg = err instanceof Error ? err.message : 'Unknown error';
 
-          // Auto-detect specific error types
-          if (isAuthError(errorMsg)) {
-            vscode.window.showErrorMessage(
-              'Claude Code is not authenticated. Please run "claude" in your terminal to authenticate.'
-            );
-          } else if (isNotInstalledError(errorMsg)) {
-            vscode.window.showErrorMessage(
-              'Claude Code CLI is not installed. Install it from https://claude.ai/code'
-            );
-          } else if (errorMsg.includes('timed out')) {
+          if (errorMsg.includes('timed out')) {
             vscode.window.showErrorMessage(
               'Commit message generation timed out. Try with fewer staged changes.'
             );
@@ -249,57 +239,6 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(command);
-}
-
-function isAuthError(message: string): boolean {
-  const authPatterns = [
-    'authentication',
-    'authenticated',
-    'API key',
-    'api_key',
-    'unauthorized',
-    'not logged in',
-    'please login',
-    'auth'
-  ];
-  const lowerMsg = message.toLowerCase();
-  return authPatterns.some(pattern => lowerMsg.includes(pattern.toLowerCase()));
-}
-
-function isNotInstalledError(message: string): boolean {
-  const notInstalledPatterns = [
-    'not found',
-    'ENOENT',
-    'command not found',
-    'not installed',
-    'cannot find',
-    'CLINotFoundError'
-  ];
-  const lowerMsg = message.toLowerCase();
-  return notInstalledPatterns.some(pattern => lowerMsg.includes(pattern.toLowerCase()));
-}
-
-/**
- * Parse and validate the JSON response from Claude using Zod schema
- */
-function parseCommitResponse(response: string): GenerateResponse | null {
-  try {
-    // Try to extract JSON from the response (handle markdown code blocks)
-    let jsonStr = response.trim();
-
-    // Remove markdown code block if present
-    const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1].trim();
-    }
-
-    const parsed = JSON.parse(jsonStr);
-
-    // Validate full structure including individual commit objects
-    return GenerateResponseSchema.parse(parsed);
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -510,126 +449,6 @@ async function handleSplitCommit(
   );
 
   return selectedCommit.message;
-}
-
-async function generateCommitMessage(
-  diff: string,
-  abortController: AbortController,
-  config: ExtensionConfig
-): Promise<GenerateResult> {
-  // Build user prompt with diff placeholder
-  const userPrompt = config.userPrompt.replace('{diff}', diff);
-
-  // Combine system prompt and user prompt
-  const prompt = `${config.prompt}\n\n---\n\n${userPrompt}`;
-
-  // Set up timeout from config
-  const timeoutMs = config.timeout;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      abortController.abort();
-      reject(new Error(`Request timed out after ${timeoutMs / 1000} seconds`));
-    }, timeoutMs);
-  });
-
-  const generatePromise = (async () => {
-    let rawResponse = '';
-
-    // Find Claude executable path
-    const claudePath = findClaudeExecutable();
-    if (!claudePath) {
-      throw new Error('Claude Code CLI not found in PATH');
-    }
-
-    for await (const message of query({
-      prompt,
-      options: {
-        abortController,
-        maxTurns: 1,
-        allowedTools: [],
-        pathToClaudeCodeExecutable: claudePath
-      }
-    })) {
-      // Check for abort
-      if (abortController.signal.aborted) {
-        throw new Error('Cancelled');
-      }
-
-      // Extract text from assistant messages
-      if (message.type === 'assistant') {
-        for (const block of message.message.content) {
-          if ('text' in block) {
-            rawResponse += block.text;
-          }
-        }
-      }
-
-      // Handle final result
-      if (message.type === 'result') {
-        logDebug('Result received', { subtype: message.subtype });
-
-        if (message.subtype === 'success') {
-          rawResponse = message.result || rawResponse;
-        } else if (message.subtype === 'error_max_turns') {
-          // Max turns reached is not an error for our use case
-          logDebug('Max turns reached, using accumulated response');
-        } else if (message.subtype === 'error_during_execution') {
-          const errorMsg = 'errors' in message
-            ? (message.errors as string[])?.join(', ')
-            : 'Execution error';
-          throw new Error(`Generation failed: ${errorMsg}`);
-        } else {
-          throw new Error(`Generation failed: ${message.subtype}`);
-        }
-      }
-    }
-
-    logDebug('Raw response from Claude', rawResponse);
-
-    // Parse the JSON response
-    const parsed = parseCommitResponse(rawResponse);
-
-    if (!parsed) {
-      logDebug('Failed to parse JSON, using raw response as fallback');
-      return {
-        message: rawResponse.trim(),
-        splitSuggested: false,
-        commits: []
-      };
-    }
-
-    // Log reasoning for debugging
-    for (const commit of parsed.commits) {
-      logDebug(`Commit reasoning: ${commit.message}`, {
-        files: commit.files,
-        reasoning: commit.reasoning
-      });
-    }
-
-    // Handle split suggestion
-    if (parsed.suggest_split && parsed.commits.length > 1) {
-      return {
-        message: parsed.commits[0].message,
-        splitSuggested: true,
-        commits: parsed.commits
-      };
-    }
-
-    // Single commit or no split needed
-    return {
-      message: parsed.commits[0]?.message || rawResponse.trim(),
-      splitSuggested: false,
-      commits: parsed.commits
-    };
-  })();
-
-  try {
-    return await Promise.race([generatePromise, timeoutPromise]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
 }
 
 export function deactivate() {}

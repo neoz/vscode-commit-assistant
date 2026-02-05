@@ -8,12 +8,12 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 21 items |
+| **Done** | 24 items |
 | **Now** | 0 items |
-| **Next** | 5 items |
+| **Next** | 3 items |
 | **Later** | 4 items |
 
-**Current Version**: 0.0.7 (in development)
+**Current Version**: 1.1.0
 
 ---
 
@@ -33,9 +33,6 @@ Items planned for the next development cycle.
 
 | Item | Description | Status | Priority |
 |------|-------------|--------|----------|
-| GitHub Copilot Agent SDK support | Add GitHub Copilot as an alternative AI backend; user can configure provider in settings (Claude remains default) | **Not Started** | P1 |
-| Provider abstraction layer | Create unified interface for AI providers to enable seamless switching between Claude and Copilot | **Not Started** | P1 |
-| Model selection | Allow users to choose Claude model (Haiku for speed, Sonnet for quality) | **Not Started** | P1 |
 | Keyboard shortcut | Add default keybinding (e.g., `Ctrl+Shift+G`) to trigger generation | **Not Started** | P1 |
 | Token usage display | Show token count after generation for cost awareness | **Not Started** | P1 |
 | Multi-repository support | Support workspaces with multiple git repos; let user pick which repo | **Not Started** | P2 |
@@ -63,6 +60,9 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
+| **VS Code Language Model provider** | Add VS Code LM API as alternative AI backend; user can configure provider in settings | 1.1.0 | **Done** |
+| **Provider abstraction layer** | Create unified interface for AI providers to enable seamless switching | 1.1.0 | **Done** |
+| **Model selection** | Allow users to choose model (Claude: Haiku/Sonnet/Opus, VS Code LM: any available) | 1.1.0 | **Done** |
 | **Configurable timeout** | User can adjust timeout for slow network conditions | 0.0.7 | **Done** |
 | **Configurable system prompt** | User can customize the system prompt for different conventions | 0.0.7 | **Done** |
 | **Configurable user prompt** | User can customize how diff is presented to Claude | 0.0.7 | **Done** |
@@ -137,9 +137,9 @@ Items shipped in previous releases.
 | **0.0.5** | **Split Detection** | Split commit detection, staging workflow | **Done** |
 | **0.0.6** | **Refinements** | Bug fixes, dependency updates | **Done** |
 | **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **In Progress** |
-| 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Planned** |
-| 1.1.0 | Multi-Provider | GitHub Copilot Agent SDK support, provider abstraction layer | **Planned** |
-| 1.2.0 | User Control | Model selection, keyboard shortcut, token usage display | **Planned** |
+| 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Done** |
+| **1.1.0** | **Multi-Provider** | VS Code LM provider, provider abstraction, model selection | **Done** |
+| 1.2.0 | User Control | Keyboard shortcut, token usage display | **Planned** |
 | 1.3.0 | Power Users | Multi-repo support, commit body support | **Planned** |
 | 2.0.0 | Enhanced UX | Streaming response, smart diff summarization | **Planned** |
 
@@ -203,25 +203,30 @@ Add GitHub Copilot as an alternative AI provider for commit message generation. 
 
 ## Changes This Update
 
-### Roadmap Update (2026-02-05)
+### v1.1.0 Release (2026-02-05)
 
-**New Items Added:**
-- GitHub Copilot Agent SDK support (P1, Next)
-- Provider abstraction layer (P1, Next)
+**Items Completed:**
+- VS Code Language Model provider support (P1)
+- Provider abstraction layer (P1)
+- Model selection (P1)
 
-**Reprioritized:**
-- Multi-repository support moved from P1 to P2 (deferred in favor of provider support)
+**Architecture Changes:**
+- Split codebase into two files: `extension.ts` (VS Code integration) and `providers.ts` (AI providers)
+- Created `CommitProvider` interface for provider abstraction
+- Implemented `ClaudeProvider` using Claude Agent SDK
+- Implemented `VSCodeLMProvider` using VS Code Language Model API (vscode.lm)
+- Added `createProvider()` factory function for provider instantiation
+- Extracted shared helpers: `buildPrompt()`, `withTimeout()`, `parseCommitResponse()`
 
-**New Dependencies:**
-- GitHub Copilot Agent SDK (optional, for Copilot provider)
+**Configuration Options:**
+- `claude-commit.provider`: Select AI provider (`claude` or `vscode-lm`)
+- `claude-commit.model`: Model selection (Claude: haiku/sonnet/opus, VS Code LM: model family)
 
-**New Risks:**
-- GitHub Copilot API changes
-- Multi-provider maintenance burden
-
-**Version Planning Updated:**
-- v1.1.0 now focused on Multi-Provider theme
-- Subsequent versions shifted accordingly
+**User-Facing Improvements:**
+- Users can now choose between Claude Code CLI or VS Code Language Models (GitHub Copilot, etc.)
+- Model selection allows cost/quality tradeoff
+- Progress notification shows which provider is being used
+- Clear error messages when provider is unavailable
 
 ### v0.0.7 Release (2026-02-04)
 

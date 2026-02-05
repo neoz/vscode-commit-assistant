@@ -1,5 +1,7 @@
 # Feature Spec: Claude Commit Message Generator
 
+> **Current Version**: 1.1.0 | **Last Updated**: 2026-02-05
+
 ## 1. Problem Statement
 
 Developers spend significant time writing commit messages that accurately describe their changes. Crafting good commit messages that follow conventional commit format requires context-switching from coding to documentation, and often results in either overly terse messages ("fix bug") or inconsistent formatting across a team.
@@ -7,6 +9,8 @@ Developers spend significant time writing commit messages that accurately descri
 This problem affects all developers using VS Code with Git, occurring multiple times per day during active development. Poor commit messages create technical debt in the form of unclear git history, making code reviews, debugging, and onboarding harder.
 
 **Evidence**: Conventional Commits has become an industry standard, yet manual adherence is inconsistent. AI-assisted writing tools have seen rapid adoption for documentation tasks.
+
+**Additional Problem (v1.1.0)**: Different developers have access to different AI tools. Some use Claude Code CLI, others have GitHub Copilot subscriptions. Forcing a single AI provider limits adoption and excludes users who prefer or only have access to alternative providers.
 
 ---
 
@@ -19,6 +23,8 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | High adoption among installers | Users who generate at least one message per week | > 60% weekly active rate |
 | Seamless workflow integration | Users who complete commit after generation | > 80% completion rate |
 | Improved reliability | Successful generation rate | > 98% (vs CLI spawn issues) |
+| Provider flexibility | Users able to use their preferred AI provider | 100% of supported providers work |
+| Model cost control | Users can select cost-appropriate models | Haiku/Sonnet/Opus options available |
 
 ---
 
@@ -28,10 +34,12 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 |----------|--------|
 | Automatic commit without user review | Users must approve AI-generated messages for accountability |
 | Multi-repository support | v1 focuses on single active repo; multi-repo adds complexity |
-| Custom authentication flow | Claude Code handles auth; extension delegates to its runtime |
+| Custom authentication flow | Each provider handles its own auth (Claude Code CLI, VS Code LM) |
 | Agentic file operations | Simple message generation does not require file editing capabilities |
 | Commit message history/learning | Would require persistent storage and significantly increase scope |
 | Integration with other Git clients | Focus on VS Code SCM view only |
+| Auto-fallback between providers | Users should explicitly choose their provider; silent fallback could cause unexpected costs |
+| Provider-specific prompt tuning | Same prompt works across providers; no per-provider customization |
 
 ---
 
@@ -56,9 +64,20 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 ### Configuration
 - **As a developer**, I want to customize the system prompt so that I can adjust the style of generated messages to my team's conventions.
 
-- **As a developer**, I want to customize the user prompt template so that I can control how the diff is presented to Claude.
+- **As a developer**, I want to customize the user prompt template so that I can control how the diff is presented to the AI.
 
 - **As a developer**, I want to configure the timeout so that I can adjust for slow network conditions.
+
+### Multi-Provider Support (v1.1.0)
+- **As a developer with Claude Code**, I want to use Claude for commit message generation so that I get high-quality messages from my preferred AI.
+
+- **As a developer with GitHub Copilot**, I want to use VS Code Language Models so that I can leverage my existing Copilot subscription without installing additional tools.
+
+- **As a developer**, I want to choose which AI model to use so that I can balance cost vs quality (e.g., Haiku for speed, Sonnet for quality).
+
+- **As a developer**, I want clear error messages when my selected provider is unavailable so that I know how to fix the issue.
+
+- **As a developer**, I want the progress notification to show which provider is being used so that I know which AI is generating my message.
 
 ### Error Handling
 - **As a developer**, I want a clear error message when no changes are staged so that I understand why generation did not start.
@@ -93,16 +112,29 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Split commit detection | When diff contains unrelated changes, suggest splitting into multiple commits | **Done** |
 | Smart staging workflow | QuickPick UI to select a commit; auto-stage only relevant files | **Done** |
 
+### Must-Have (P0) - **v1.1.0 Multi-Provider**
+
+| Requirement | Acceptance Criteria | Status |
+|-------------|---------------------|--------|
+| Provider abstraction | Extension supports pluggable AI providers via `CommitProvider` interface | **Done** |
+| Claude provider | Users can generate messages using Claude Agent SDK (default) | **Done** |
+| VS Code LM provider | Users can generate messages using VS Code Language Model API (GitHub Copilot, etc.) | **Done** |
+| Provider selection | Users can select provider via `claude-commit.provider` setting | **Done** |
+| Model selection | Users can select model via `claude-commit.model` setting (haiku/sonnet/opus or LM family) | **Done** |
+| Provider availability check | Extension checks if selected provider is available before generation | **Done** |
+| Clear unavailability errors | When provider unavailable, show specific error with setup instructions | **Done** |
+| Provider name in progress | Progress notification shows which provider is generating | **Done** |
+
 ### Nice-to-Have (P1)
 
 | Requirement | Rationale | Status |
 |-------------|-----------|--------|
 | Configurable timeout | Users with slow connections may need longer timeout | **Done** (v0.0.7) |
 | Configurable system prompt | Teams have different commit message conventions | **Done** (v0.0.7) |
-| Configurable user prompt | Customize how diff is presented to Claude | **Done** (v0.0.7) |
-| Model selection | Allow users to choose Claude model for cost/quality tradeoff | Not Started |
+| Configurable user prompt | Customize how diff is presented to AI | **Done** (v0.0.7) |
 | Multi-repository support | Power users work with monorepos or multiple repos | Not Started |
 | Token usage display | Show token count after generation for cost awareness | Not Started |
+| Keyboard shortcut | Quick access via keybinding (e.g., Ctrl+Shift+G) | Not Started |
 
 ### Future Considerations (P2)
 
@@ -142,45 +174,76 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 |----------|-------|--------|
 | What is the minimum Claude Agent SDK version required? | Engineering | **Resolved** - Using ^0.1.0 |
 | Does the SDK support AbortController for cancellation? | Engineering | **Resolved** - Yes, via options.abortController |
+| Which VS Code LM API to use? | Engineering | **Resolved** - Using vscode.lm (Language Model API) |
+| Should we auto-fallback between providers? | Product | **Resolved** - No, show clear error instead |
 | Should we add telemetry to measure usage? | Product/Engineering | Open |
 | Should we support commit message body (multi-line) in addition to subject? | Product | Open (v1 focuses on subject line) |
 | How should we handle very large diffs (>10k chars)? | Engineering | **Resolved** - Truncates with "... (truncated)" suffix |
+| Should model setting use user-friendly names or full IDs? | Engineering | **Resolved** - User-friendly (haiku/sonnet/opus) with pass-through for full IDs |
 
 ---
 
 ## 8. Timeline Considerations
 
-- **Dependency**: Requires Claude Code to be installed and authenticated (SDK delegates to Claude Code runtime)
+- **Dependency**: Requires either Claude Code CLI OR a VS Code Language Model provider (GitHub Copilot, etc.)
 - **API Dependency**: Uses VS Code proposed API `contribSourceControlInputBoxMenu` for optimal UX (SCM input box button); falls back to stable `scm/title` API
-- **Migration**: This is a non-breaking change; CLI dependency is replaced with SDK but user setup remains similar
+- **VS Code Version**: VS Code Language Model API requires VS Code 1.85.0+
+- **Migration**: Non-breaking change; Claude remains default, VS Code LM is opt-in via settings
 - **No hard deadlines**: This is an open-source community extension
 
 ---
 
 ## 9. Technical Architecture
 
-### Current Architecture (SDK-based, v0.0.6)
+### Current Architecture (Multi-Provider, v1.1.0)
 
 ```
 [User clicks sparkle]
     -> [Get staged diff via vscode.git API]
+    -> [Load config: provider, model, prompts]
+    -> [Create provider via createProvider(type, model)]
+    -> [Check provider.isAvailable()]
+    -> [If unavailable: show error and stop]
     -> [Build prompt with system instructions + diff]
-    -> [Call Claude Agent SDK query()]
-    -> [Parse JSON response]
+    -> [Call provider.generateCommitMessage()]
+    -> [Parse JSON response via Zod schemas]
     -> [If split suggested: show QuickPick -> stage selected files]
     -> [Insert message into repo.inputBox.value]
 ```
 
-**Benefits of SDK approach**:
-- No process spawning overhead
-- Cross-platform without shell commands
-- Proper error types and handling
-- AbortController support for cancellation
-- Cleaner async/await flow
+### File Structure
+
+```
+src/
+  extension.ts    - VS Code integration, commands, UI, config
+  providers.ts    - Provider interface, ClaudeProvider, VSCodeLMProvider
+```
+
+### Provider Interface
+
+```typescript
+interface CommitProvider {
+  readonly name: string;
+  isAvailable(): Promise<boolean>;
+  generateCommitMessage(
+    diff: string,
+    abortController: AbortController,
+    config: ProviderConfig,
+    logDebug: (msg: string, data?: unknown) => void
+  ): Promise<GenerateResult>;
+}
+```
+
+### Supported Providers
+
+| Provider | Implementation | Requirements |
+|----------|---------------|--------------|
+| `claude` | ClaudeProvider | Claude Code CLI installed and authenticated |
+| `vscode-lm` | VSCodeLMProvider | VS Code 1.85+, GitHub Copilot or other LM provider |
 
 ### JSON Response Format
 
-The extension now uses a structured JSON response format for better parsing and split detection:
+Both providers expect the same JSON response format:
 
 ```json
 {
@@ -195,34 +258,21 @@ The extension now uses a structured JSON response format for better parsing and 
 }
 ```
 
-### SDK Integration
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-async function generateCommitMessage(diff: string, abortController: AbortController): Promise<GenerateResult> {
-  const claudePath = findClaudeExecutable();
-
-  for await (const message of query({
-    prompt,
-    options: {
-      abortController,
-      maxTurns: 1,
-      allowedTools: [],
-      pathToClaudeCodeExecutable: claudePath
-    }
-  })) {
-    // Process streaming response
-  }
-
-  return { message, splitSuggested, commits };
-}
-```
-
-### Configuration Schema (v0.0.7)
+### Configuration Schema (v1.1.0)
 
 ```json
 {
+  "claude-commit.provider": {
+    "type": "string",
+    "enum": ["claude", "vscode-lm"],
+    "default": "claude",
+    "description": "AI provider for commit message generation"
+  },
+  "claude-commit.model": {
+    "type": "string",
+    "default": "haiku",
+    "description": "Model to use (Claude: haiku/sonnet/opus, VS Code LM: model family)"
+  },
   "claude-commit.timeout": {
     "type": "number",
     "default": 30000,
@@ -234,43 +284,63 @@ async function generateCommitMessage(diff: string, abortController: AbortControl
     "type": "string",
     "default": "",
     "editPresentation": "multilineText",
-    "description": "Custom system prompt for commit message generation. Leave empty to use default."
+    "description": "Custom system prompt. Leave empty for default."
   },
   "claude-commit.userPrompt": {
     "type": "string",
     "default": "",
     "editPresentation": "multilineText",
-    "description": "Custom user prompt template. Use {diff} as placeholder. Leave empty to use default."
+    "description": "Custom user prompt template. Use {diff} placeholder."
   }
 }
 ```
 
+### Model Mapping (Claude Provider)
+
+| User-Friendly | Full Model ID |
+|---------------|---------------|
+| `haiku` | `claude-3-5-haiku-20241022` |
+| `sonnet` | `claude-sonnet-4-20250514` |
+| `opus` | `claude-opus-4-20250514` |
+| (any other) | Passed through as-is |
+
 **Key Dependencies**:
 - `vscode.git` extension (built-in)
-- `@anthropic-ai/claude-agent-sdk` (bundled)
-- Claude Code installed and authenticated (runtime dependency)
+- `@anthropic-ai/claude-agent-sdk` (bundled, for Claude provider)
+- `vscode.lm` API (built-in VS Code 1.85+, for VS Code LM provider)
+- Claude Code CLI (runtime, only for Claude provider)
+- GitHub Copilot or other LM extension (runtime, only for VS Code LM provider)
 
 ---
 
 ## 10. Migration Notes
 
-### For Users
+### For Users (v1.0 -> v1.1)
 
-- Claude Code CLI must still be installed and authenticated
-- No changes to user workflow (same sparkle button)
-- Faster and more reliable generation
-- Cancellation now supported
+- **No breaking changes** - Claude remains the default provider
+- **New option**: Can now use VS Code Language Models (GitHub Copilot) instead of Claude
+- **New setting**: `claude-commit.provider` to switch between `claude` and `vscode-lm`
+- **New setting**: `claude-commit.model` to select specific model (haiku/sonnet/opus)
+- Same sparkle button workflow
+
+### Switching to VS Code LM Provider
+
+1. Ensure you have GitHub Copilot or another VS Code LM provider installed
+2. Open VS Code Settings
+3. Set `claude-commit.provider` to `vscode-lm`
+4. Optionally set `claude-commit.model` to your preferred model family (e.g., `gpt-4o`)
 
 ### For Development
 
-1. Add `@anthropic-ai/claude-agent-sdk` to dependencies
-2. Replace `spawn` logic with SDK calls
-3. Add AbortController for cancellation
-4. Update error handling for SDK error types
-5. Remove temp file creation/cleanup
-6. Update timeout handling (SDK may have built-in)
+**v1.1.0 Architecture Changes:**
+1. Split `extension.ts` into two files: `extension.ts` and `providers.ts`
+2. Created `CommitProvider` interface for provider abstraction
+3. Implemented `ClaudeProvider` and `VSCodeLMProvider`
+4. Added `createProvider()` factory function
+5. Extracted shared helpers: `buildPrompt()`, `withTimeout()`
+6. Updated config to include `provider` and `model` settings
 
 ### Breaking Changes
 
 - None for end users
-- Internal architecture change only
+- Internal: `generateCommitMessage()` function moved to provider classes
