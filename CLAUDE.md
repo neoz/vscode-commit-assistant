@@ -39,8 +39,9 @@ This is a VS Code extension that generates git commit messages using AI provider
 6. Filters sensitive files based on exclude patterns
 7. Calls `provider.generateCommitMessage()` with prompt + diff
 8. Parses JSON response via Zod schemas
-9. If split suggested: shows QuickPick, stages selected files
-10. Inserts message into commit input box
+9. If split suggested: shows QuickPick with "Stage all step by step" option + individual commits
+10. Single pick: stages selected files, inserts message
+11. Step-by-step: starts a split session that auto-advances through commits via `onDidCommit`
 
 **Providers:**
 - `ClaudeProvider` - Uses Claude Agent SDK, requires Claude Code CLI
