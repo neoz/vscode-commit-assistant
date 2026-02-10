@@ -38,6 +38,18 @@ Then press F5 in VS Code to launch Extension Development Host.
 3. Wait for AI to generate a commit message
 4. Review and commit
 
+### Split Commits
+
+When the AI detects unrelated changes, it suggests splitting into multiple commits. You can:
+
+- **Pick a single commit** to stage just that commit's files
+- **Stage all step by step** to walk through each commit sequentially:
+  1. The first commit's files are staged and its message is set
+  2. A status bar item shows your progress (e.g., "Split 1/3 | Next: fix(api)...")
+  3. After you commit, the next commit is automatically staged
+  4. Click the status bar item to manually advance if needed
+  5. Repeat until all commits are done
+
 The extension generates conventional commit messages in the format:
 ```
 type(scope): description
@@ -57,6 +69,7 @@ To use VS Code Language Models instead of Claude:
 - **Multi-provider support**: Use Claude Code CLI or VS Code Language Models
 - **Model selection**: Choose between Haiku (fast), Sonnet, or Opus for Claude
 - **Split commit detection**: Suggests splitting unrelated changes into atomic commits
+- **Step-by-step split commits**: Walk through all suggested commits sequentially with auto-advance
 - **Smart staging**: Auto-stages only relevant files for selected commit
 - **Sensitive file filtering**: Excludes .env, keys, and credentials from AI
 - **Customizable prompts**: Adjust system/user prompts for your team's conventions
