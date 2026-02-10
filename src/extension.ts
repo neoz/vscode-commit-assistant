@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { minimatch } from 'minimatch';
 import {
@@ -58,10 +59,23 @@ interface GitAPI {
   repositories: Repository[];
 }
 
+interface RepositoryState {
+  indexChanges: GitChange[];
+  workingTreeChanges: GitChange[];
+}
+
+interface GitChange {
+  uri: vscode.Uri;
+  originalUri: vscode.Uri;
+  renameUri: vscode.Uri | undefined;
+  status: number;
+}
+
 interface Repository {
   inputBox: { value: string };
   diff(staged: boolean): Promise<string>;
   rootUri: vscode.Uri;
+  state: RepositoryState;
 }
 
 interface ExtensionConfig {
@@ -339,6 +353,47 @@ function parseDiffSections(diff: string): Map<string, string> {
 }
 
 /**
+ * Get relative paths of all staged files from the VS Code Git API
+ */
+function getStagedRelativePaths(repo: Repository): string[] {
+  return repo.state.indexChanges.map(change =>
+    path.relative(repo.rootUri.fsPath, change.uri.fsPath).replace(/\\/g, '/')
+  );
+}
+
+/**
+ * Match AI-suggested file paths against actual staged files.
+ * Handles exact match and case-insensitive match (for Windows).
+ */
+function resolveAiFilesToStaged(
+  aiFiles: string[],
+  stagedFiles: string[]
+): { matched: string[]; unmatched: string[] } {
+  const matched: string[] = [];
+  const unmatched: string[] = [];
+
+  for (const aiFile of aiFiles) {
+    const normalized = aiFile.replace(/\\/g, '/');
+
+    const exact = stagedFiles.find(f => f === normalized);
+    if (exact) {
+      matched.push(exact);
+      continue;
+    }
+
+    const caseMatch = stagedFiles.find(f => f.toLowerCase() === normalized.toLowerCase());
+    if (caseMatch) {
+      matched.push(caseMatch);
+      continue;
+    }
+
+    unmatched.push(aiFile);
+  }
+
+  return { matched, unmatched };
+}
+
+/**
  * Filter diff to remove sensitive files based on exclude patterns
  */
 function filterSensitiveDiff(
@@ -368,16 +423,18 @@ function filterSensitiveDiff(
 }
 
 /**
- * Unstage all files, then stage only the files for the selected commit
+ * Selectively unstage files not belonging to the selected commit.
+ * Uses VS Code Git API to read staged state, validates AI paths against it,
+ * then only unstages the complement (files NOT in the selected commit).
  */
 async function stageFilesForCommit(
-  workspaceRoot: vscode.Uri,
+  repo: Repository,
   filesToStage: string[]
 ): Promise<void> {
-  const cwd = workspaceRoot.fsPath;
-  logDebug('Staging files', { cwd, filesToStage });
+  const cwd = repo.rootUri.fsPath;
+  logDebug('Smart staging files', { cwd, filesToStage });
 
-  // Validate and filter paths to prevent path traversal attacks
+  // Validate paths to prevent path traversal from AI responses
   const validFiles = filesToStage.filter(f => {
     if (!isValidRelativePath(f)) {
       logDebug(`Rejected invalid file path: ${f}`);
@@ -390,34 +447,54 @@ async function stageFilesForCommit(
     throw new Error('No valid file paths to stage');
   }
 
-  logDebug('Valid files to stage', { validFiles });
+  // Read currently staged files from VS Code Git API
+  const stagedFiles = getStagedRelativePaths(repo);
+  logDebug('Currently staged files (from Git API)', { stagedFiles });
 
-  // Step 1: Unstage all currently staged files
-  try {
-    execFileSync('git', ['reset', 'HEAD'], { cwd, encoding: 'utf-8', stdio: 'pipe' });
-    logDebug('Unstaged all files');
-  } catch (err) {
-    logDebug('Failed to unstage files (may be initial commit)', err);
+  // Match AI-suggested files against actual staged files
+  const { matched, unmatched } = resolveAiFilesToStaged(validFiles, stagedFiles);
+
+  if (unmatched.length > 0) {
+    logDebug('AI suggested files not found in staged changes', { unmatched });
   }
 
-  // Step 2: Stage only the files for the selected commit
-  for (const relativePath of validFiles) {
-    try {
-      // Use execFileSync to prevent command injection from AI-generated paths
-      execFileSync('git', ['add', '--', relativePath], { cwd, encoding: 'utf-8', stdio: 'pipe' });
-      logDebug(`Staged file: ${relativePath}`);
-    } catch (err) {
-      logDebug(`Failed to stage file: ${relativePath}`, err);
-    }
+  if (matched.length === 0) {
+    throw new Error('None of the suggested files match currently staged changes');
+  }
+
+  logDebug('Matched files to keep staged', { matched });
+
+  // Compute files to unstage (staged files NOT in the selected commit)
+  const matchedSet = new Set(matched);
+  const filesToUnstage = stagedFiles.filter(f => !matchedSet.has(f));
+
+  if (filesToUnstage.length === 0) {
+    logDebug('All staged files belong to selected commit, no unstaging needed');
+    return;
+  }
+
+  logDebug('Selectively unstaging files', { filesToUnstage });
+
+  // Selectively unstage only the files not in the selected commit
+  // (VS Code Git API does not expose an unstage method, so we use git reset)
+  try {
+    execFileSync('git', ['reset', 'HEAD', '--', ...filesToUnstage], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: 'pipe'
+    });
+    logDebug('Selectively unstaged files', { count: filesToUnstage.length });
+  } catch (err) {
+    logDebug('Failed to selectively unstage files', err);
+    throw new Error('Failed to update staging area');
   }
 }
 
 /**
  * Handle the split commit workflow:
  * 1. Show QuickPick for user to select one commit
- * 2. Unstage all files
- * 3. Stage only files for selected commit
- * 4. Return the commit message, or undefined if cancelled
+ * 2. Selectively unstage files not in the selected commit
+ * 3. Return the commit message, or undefined if cancelled
  */
 async function handleSplitCommit(
   repo: Repository,
@@ -444,7 +521,7 @@ async function handleSplitCommit(
       cancellable: false
     },
     async () => {
-      await stageFilesForCommit(repo.rootUri, selectedCommit.files);
+      await stageFilesForCommit(repo, selectedCommit.files);
     }
   );
 
