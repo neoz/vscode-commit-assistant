@@ -14,6 +14,17 @@ import {
 // Output channel for debug logging
 let outputChannel: vscode.OutputChannel;
 
+// Split session state for step-by-step commit workflow
+interface SplitSession {
+  repo: Repository;
+  commits: CommitSuggestion[];
+  currentIndex: number;
+  statusBarItem: vscode.StatusBarItem;
+  commitListener: vscode.Disposable;
+}
+
+let activeSplitSession: SplitSession | null = null;
+
 // Default system prompt for commit message generation
 const DEFAULT_SYSTEM_PROMPT = `You are a Git commit message generator. Analyze the provided diff and generate commit messages following Conventional Commits specification.
 
@@ -47,8 +58,14 @@ const DEFAULT_USER_PROMPT = 'Analyze this git diff and generate commit message(s
  * Extended QuickPickItem for commit suggestions
  */
 interface CommitQuickPickItem extends vscode.QuickPickItem {
-  commit: CommitSuggestion;
+  commit?: CommitSuggestion;
+  isStageAll?: boolean;
 }
+
+type SplitPickerResult =
+  | { mode: 'single'; commit: CommitSuggestion }
+  | { mode: 'all' }
+  | undefined;
 
 interface GitExtension {
   getAPI(version: number): GitAPI;
@@ -75,6 +92,7 @@ interface Repository {
   diff(staged: boolean): Promise<string>;
   rootUri: vscode.Uri;
   state: RepositoryState;
+  onDidCommit: vscode.Event<void>;
 }
 
 interface ExtensionConfig {
@@ -132,7 +150,15 @@ export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('Claude Commit Assistant');
   context.subscriptions.push(outputChannel);
 
+  const nextSplitCommand = vscode.commands.registerCommand('claude-commit.nextSplitCommit', () => {
+    advanceSplitSession();
+  });
+  context.subscriptions.push(nextSplitCommand);
+
   const command = vscode.commands.registerCommand('claude-commit.generate', async () => {
+    // Cancel any active split session when re-generating
+    cancelSplitSession();
+
     const gitExt = vscode.extensions.getExtension<GitExtension>('vscode.git');
     if (!gitExt) {
       vscode.window.showErrorMessage('Git extension not found');
@@ -221,7 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           if (result.splitSuggested && result.commits.length > 1) {
             // Handle split commit flow
-            const selectedMessage = await handleSplitCommit(repo, result.commits);
+            const selectedMessage = await handleSplitCommit(repo, result.commits, context);
             if (selectedMessage) {
               repo.inputBox.value = selectedMessage;
             }
@@ -266,27 +292,49 @@ function logDebug(message: string, data?: unknown): void {
 }
 
 /**
- * Show a QuickPick dialog for split commit suggestions
- * Returns the selected commit, or undefined if cancelled
+ * Show a QuickPick dialog for split commit suggestions.
+ * Returns the selected commit, 'all' mode for step-by-step, or undefined if cancelled.
  */
 async function showSplitCommitPicker(
   commits: CommitSuggestion[]
-): Promise<CommitSuggestion | undefined> {
-  const items: CommitQuickPickItem[] = commits.map((commit) => ({
+): Promise<SplitPickerResult> {
+  const stageAllItem: CommitQuickPickItem = {
+    label: `$(list-ordered) Stage all commits step by step`,
+    description: `(${commits.length} commits)`,
+    isStageAll: true
+  };
+
+  const separator: CommitQuickPickItem = {
+    label: '',
+    kind: vscode.QuickPickItemKind.Separator
+  };
+
+  const commitItems: CommitQuickPickItem[] = commits.map((commit) => ({
     label: `$(git-commit) ${commit.message}`,
     description: `${commit.files.length} file${commit.files.length !== 1 ? 's' : ''}`,
     detail: commit.files.join(', '),
     commit: commit
   }));
 
-  const selected = await vscode.window.showQuickPick(items, {
-    title: 'Select a commit to stage',
-    placeHolder: 'Claude suggests splitting into multiple commits. Pick one to stage:',
-    matchOnDescription: true,
-    matchOnDetail: true
-  });
+  const selected = await vscode.window.showQuickPick(
+    [stageAllItem, separator, ...commitItems],
+    {
+      title: 'Select a commit to stage',
+      placeHolder: 'Split into multiple commits. Pick one, or stage all step by step:',
+      matchOnDescription: true,
+      matchOnDetail: true
+    }
+  );
 
-  return selected?.commit;
+  if (!selected) {
+    return undefined;
+  }
+
+  if (selected.isStageAll) {
+    return { mode: 'all' };
+  }
+
+  return { mode: 'single', commit: selected.commit! };
 }
 
 /**
@@ -490,27 +538,193 @@ async function stageFilesForCommit(
 }
 
 /**
+ * Stage files by running `git add` for the given paths.
+ * Used during step-by-step split sessions (commits 2+) where files are unstaged.
+ */
+function stageFiles(repo: Repository, files: string[]): void {
+  const cwd = repo.rootUri.fsPath;
+  const validFiles = files.filter(f => {
+    if (!isValidRelativePath(f)) {
+      logDebug(`Rejected invalid file path: ${f}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (validFiles.length === 0) {
+    throw new Error('No valid file paths to stage');
+  }
+
+  try {
+    execFileSync('git', ['add', '--', ...validFiles], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: 'pipe'
+    });
+    logDebug('Staged files', { files: validFiles });
+  } catch (err) {
+    logDebug('Failed to stage files', err);
+    throw new Error('Failed to stage files');
+  }
+}
+
+/**
+ * Update the status bar item to show current split session progress.
+ */
+function updateSplitStatusBar(session: SplitSession): void {
+  const { commits, currentIndex, statusBarItem } = session;
+  const current = currentIndex + 1;
+  const total = commits.length;
+
+  if (currentIndex < commits.length - 1) {
+    const nextMsg = commits[currentIndex + 1].message;
+    const truncated = nextMsg.length > 40 ? nextMsg.substring(0, 37) + '...' : nextMsg;
+    statusBarItem.text = `$(git-commit) Split ${current}/${total} | Next: ${truncated}`;
+    statusBarItem.tooltip = `Commit ${current} of ${total}. Click to advance to next commit.\nNext: ${nextMsg}`;
+  } else {
+    statusBarItem.text = `$(git-commit) Split ${current}/${total} (last)`;
+    statusBarItem.tooltip = `Last commit (${current} of ${total}). Commit to finish.`;
+  }
+}
+
+/**
+ * Start a step-by-step split commit session.
+ * Stages the first commit and sets up auto-advance on commit.
+ */
+async function startSplitSession(
+  repo: Repository,
+  commits: CommitSuggestion[],
+  context: vscode.ExtensionContext
+): Promise<void> {
+  cancelSplitSession();
+
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  statusBarItem.command = 'claude-commit.nextSplitCommit';
+  context.subscriptions.push(statusBarItem);
+
+  const commitListener = repo.onDidCommit(() => {
+    advanceSplitSession();
+  });
+  context.subscriptions.push(commitListener);
+
+  activeSplitSession = {
+    repo,
+    commits,
+    currentIndex: 0,
+    statusBarItem,
+    commitListener
+  };
+
+  // Stage first commit using selective unstage (same as single-pick flow)
+  await stageFilesForCommit(repo, commits[0].files);
+  repo.inputBox.value = commits[0].message;
+
+  updateSplitStatusBar(activeSplitSession);
+  statusBarItem.show();
+
+  logDebug('Split session started', { totalCommits: commits.length });
+}
+
+/**
+ * Advance to the next commit in the split session.
+ * Called automatically on commit or manually via status bar click.
+ */
+function advanceSplitSession(): void {
+  if (!activeSplitSession) {
+    return;
+  }
+
+  const session = activeSplitSession;
+  session.currentIndex++;
+
+  if (session.currentIndex >= session.commits.length) {
+    // All commits done
+    cancelSplitSession();
+    vscode.window.showInformationMessage('Split commits complete!');
+    logDebug('Split session complete');
+    return;
+  }
+
+  const commit = session.commits[session.currentIndex];
+
+  // For commits 2+, files are unstaged (they were unstaged in step 1).
+  // Just stage the next batch directly.
+  try {
+    stageFiles(session.repo, commit.files);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    vscode.window.showErrorMessage(`Failed to stage files for next commit: ${msg}`);
+    cancelSplitSession();
+    return;
+  }
+
+  session.repo.inputBox.value = commit.message;
+  updateSplitStatusBar(session);
+
+  logDebug('Advanced split session', {
+    index: session.currentIndex,
+    message: commit.message
+  });
+}
+
+/**
+ * Cancel and clean up any active split session.
+ */
+function cancelSplitSession(): void {
+  if (!activeSplitSession) {
+    return;
+  }
+
+  activeSplitSession.statusBarItem.hide();
+  activeSplitSession.statusBarItem.dispose();
+  activeSplitSession.commitListener.dispose();
+  activeSplitSession = null;
+
+  logDebug('Split session cancelled/cleaned up');
+}
+
+/**
  * Handle the split commit workflow:
- * 1. Show QuickPick for user to select one commit
- * 2. Selectively unstage files not in the selected commit
+ * 1. Show QuickPick for user to select one commit or stage all step by step
+ * 2. Selectively unstage/stage files as needed
  * 3. Return the commit message, or undefined if cancelled
  */
 async function handleSplitCommit(
   repo: Repository,
-  commits: CommitSuggestion[]
+  commits: CommitSuggestion[],
+  context: vscode.ExtensionContext
 ): Promise<string | undefined> {
   logDebug('Split suggested', { commitCount: commits.length });
 
-  const selectedCommit = await showSplitCommitPicker(commits);
+  const result = await showSplitCommitPicker(commits);
 
-  if (!selectedCommit) {
+  if (!result) {
     logDebug('User cancelled split commit selection');
     return undefined;
   }
 
+  if (result.mode === 'all') {
+    logDebug('User selected stage all step by step');
+
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Staging files for first commit...',
+        cancellable: false
+      },
+      async () => {
+        await startSplitSession(repo, commits, context);
+      }
+    );
+
+    // First commit message is already set by startSplitSession
+    return undefined;
+  }
+
+  // Single commit mode
   logDebug('User selected commit', {
-    message: selectedCommit.message,
-    files: selectedCommit.files
+    message: result.commit.message,
+    files: result.commit.files
   });
 
   await vscode.window.withProgress(
@@ -520,11 +734,13 @@ async function handleSplitCommit(
       cancellable: false
     },
     async () => {
-      await stageFilesForCommit(repo, selectedCommit.files);
+      await stageFilesForCommit(repo, result.commit.files);
     }
   );
 
-  return selectedCommit.message;
+  return result.commit.message;
 }
 
-export function deactivate() {}
+export function deactivate() {
+  cancelSplitSession();
+}

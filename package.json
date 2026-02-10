@@ -25,6 +25,10 @@
         "command": "claude-commit.generate",
         "title": "Generate Commit Message with AI",
         "icon": "$(wand)"
+      },
+      {
+        "command": "claude-commit.nextSplitCommit",
+        "title": "Advance to Next Split Commit"
       }
     ],
     "menus": {
