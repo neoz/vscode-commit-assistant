@@ -23,7 +23,6 @@ const DEFAULT_SYSTEM_PROMPT = `You are a Git commit message generator. Analyze t
 3. Scope: Infer from semantic context; use file paths as hints when unclear (e.g., src/auth/ → auth). Omit if no clear scope.
 4. Description: imperative mood, lowercase, no period, keep under 72 characters for the first line
 5. No emojis
-6. Group related changes into a single commit when same type and scope
 
 ## Split Detection
 If the diff contains multiple unrelated changes (different features, fixes, or concerns), set suggest_split: true and provide separate commit messages.
