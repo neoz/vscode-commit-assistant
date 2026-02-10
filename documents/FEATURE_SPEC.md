@@ -61,6 +61,12 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 - **As a developer**, I want the extension to automatically stage only the relevant files for my selected commit so that I don't have to manually unstage/stage files.
 
+- **As a developer**, I want a "Stage all step by step" option that walks through each suggested commit sequentially so that I can commit all splits without re-running generation.
+
+- **As a developer**, I want the extension to auto-advance to the next commit after I commit so that the step-by-step flow is seamless.
+
+- **As a developer**, I want a status bar item showing my progress (e.g., "Split 1/3") so that I know where I am in the split workflow.
+
 ### Configuration
 - **As a developer**, I want to customize the system prompt so that I can adjust the style of generated messages to my team's conventions.
 
@@ -111,6 +117,7 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Cross-platform support | Works on Windows, macOS, and Linux | **Done** |
 | Split commit detection | When diff contains unrelated changes, suggest splitting into multiple commits | **Done** |
 | Smart staging workflow | QuickPick UI to select a commit; auto-stage only relevant files | **Done** |
+| Step-by-step split commits | "Stage all step by step" option walks through each commit sequentially with auto-advance | **Done** |
 
 ### Must-Have (P0) - **v1.1.0 Multi-Provider**
 
@@ -207,8 +214,9 @@ This problem affects all developers using VS Code with Git, occurring multiple t
     -> [Build prompt with system instructions + diff]
     -> [Call provider.generateCommitMessage()]
     -> [Parse JSON response via Zod schemas]
-    -> [If split suggested: show QuickPick -> stage selected files]
-    -> [Insert message into repo.inputBox.value]
+    -> [If split suggested: show QuickPick with "Stage all step by step" + individual commits]
+    -> [Single pick: stage selected files -> insert message]
+    -> [Stage all: start split session -> auto-advance via onDidCommit]
 ```
 
 ### File Structure
