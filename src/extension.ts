@@ -25,7 +25,7 @@ const DEFAULT_SYSTEM_PROMPT = `You are a Git commit message generator. Analyze t
 5. No emojis
 
 ## Split Detection
-If the diff contains multiple unrelated changes (different features, fixes, or concerns), set suggest_split: true and provide separate commit messages.
+If the diff contains multiple unrelated changes (different features, fixes, or concerns, .. etc), set suggest_split: true and provide separate commit messages.
 
 ## Output JSON
 You MUST respond with valid JSON only, no other text:
