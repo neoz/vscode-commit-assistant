@@ -8,7 +8,7 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 24 items |
+| **Done** | 25 items |
 | **Now** | 0 items |
 | **Next** | 3 items |
 | **Later** | 4 items |
@@ -63,6 +63,7 @@ Items shipped in previous releases.
 | **VS Code Language Model provider** | Add VS Code LM API as alternative AI backend; user can configure provider in settings | 1.1.0 | **Done** |
 | **Provider abstraction layer** | Create unified interface for AI providers to enable seamless switching | 1.1.0 | **Done** |
 | **Model selection** | Allow users to choose model (Claude: Haiku/Sonnet/Opus, VS Code LM: any available) | 1.1.0 | **Done** |
+| **Step-by-step split commits** | "Stage all step by step" option to walk through each suggested commit sequentially with auto-advance on commit | 1.2.0 | **Done** |
 | **Configurable timeout** | User can adjust timeout for slow network conditions | 0.0.7 | **Done** |
 | **Configurable system prompt** | User can customize the system prompt for different conventions | 0.0.7 | **Done** |
 | **Configurable user prompt** | User can customize how diff is presented to Claude | 0.0.7 | **Done** |
