@@ -151,8 +151,43 @@ export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('Claude Commit Assistant');
   context.subscriptions.push(outputChannel);
 
-  const nextSplitCommand = vscode.commands.registerCommand('claude-commit.nextSplitCommit', () => {
-    advanceSplitSession();
+  const nextSplitCommand = vscode.commands.registerCommand('claude-commit.nextSplitCommit', async () => {
+    if (!activeSplitSession) {
+      return;
+    }
+
+    const session = activeSplitSession;
+    const isLast = session.currentIndex >= session.commits.length - 1;
+
+    const items: vscode.QuickPickItem[] = [];
+
+    if (!isLast) {
+      items.push({
+        label: '$(debug-step-over) Skip to next commit',
+        description: session.commits[session.currentIndex + 1].message
+      });
+    }
+
+    items.push({
+      label: '$(close) Cancel split session',
+      description: 'Stop the step-by-step workflow'
+    });
+
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `Split commit ${session.currentIndex + 1}/${session.commits.length}`,
+      placeHolder: 'Choose an action'
+    });
+
+    if (!picked) {
+      return;
+    }
+
+    if (picked.label.includes('Cancel')) {
+      cancelSplitSession();
+      vscode.window.showInformationMessage('Split session cancelled.');
+    } else {
+      advanceSplitSession();
+    }
   });
   context.subscriptions.push(nextSplitCommand);
 
@@ -285,16 +320,23 @@ export function activate(context: vscode.ExtensionContext) {
  * Wait for VS Code Git extension to reflect expected staged files.
  * After modifying the git index directly (via execFileSync), VS Code's cached
  * state may be stale. This refreshes the state and verifies staged files match.
+ * Supports cancellation via CancellationToken (throws on cancel).
  */
 async function waitForStagingReady(
   repo: Repository,
   expectedFiles: string[],
+  token?: vscode.CancellationToken,
   maxRetries: number = 10,
   intervalMs: number = 100
 ): Promise<void> {
   const expectedSet = new Set(expectedFiles.map(f => f.replace(/\\/g, '/')));
 
   for (let i = 0; i < maxRetries; i++) {
+    if (token?.isCancellationRequested) {
+      logDebug('Staging wait cancelled by user');
+      throw new vscode.CancellationError();
+    }
+
     await repo.status();
     const currentStaged = getStagedRelativePaths(repo);
     const currentSet = new Set(currentStaged);
@@ -518,7 +560,8 @@ function filterSensitiveDiff(
  */
 async function stageFilesForCommit(
   repo: Repository,
-  filesToStage: string[]
+  filesToStage: string[],
+  token?: vscode.CancellationToken
 ): Promise<void> {
   const cwd = repo.rootUri.fsPath;
   logDebug('Smart staging files', { cwd, filesToStage });
@@ -580,7 +623,7 @@ async function stageFilesForCommit(
 
   // Wait for VS Code Git to reflect the new staging state before proceeding.
   // Without this, the user could commit before VS Code sees the correct staged files.
-  await waitForStagingReady(repo, matched);
+  await waitForStagingReady(repo, matched, token);
 }
 
 /**
@@ -588,7 +631,7 @@ async function stageFilesForCommit(
  * Used during step-by-step split sessions (commits 2+) where files are unstaged.
  * Waits for VS Code Git to reflect the staging before returning.
  */
-async function stageFiles(repo: Repository, files: string[]): Promise<void> {
+async function stageFiles(repo: Repository, files: string[], token?: vscode.CancellationToken): Promise<void> {
   const cwd = repo.rootUri.fsPath;
   const validFiles = files.filter(f => {
     if (!isValidRelativePath(f)) {
@@ -615,7 +658,7 @@ async function stageFiles(repo: Repository, files: string[]): Promise<void> {
   }
 
   // Wait for VS Code Git to reflect the staged files before allowing commit
-  await waitForStagingReady(repo, validFiles);
+  await waitForStagingReady(repo, validFiles, token);
 }
 
 /**
@@ -644,7 +687,8 @@ function updateSplitStatusBar(session: SplitSession): void {
 async function startSplitSession(
   repo: Repository,
   commits: CommitSuggestion[],
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
+  token?: vscode.CancellationToken
 ): Promise<void> {
   cancelSplitSession();
 
@@ -666,7 +710,7 @@ async function startSplitSession(
   };
 
   // Stage first commit using selective unstage (same as single-pick flow)
-  await stageFilesForCommit(repo, commits[0].files);
+  await stageFilesForCommit(repo, commits[0].files, token);
   repo.inputBox.value = commits[0].message;
 
   updateSplitStatusBar(activeSplitSession);
@@ -679,6 +723,7 @@ async function startSplitSession(
  * Advance to the next commit in the split session.
  * Called automatically on commit or manually via status bar click.
  * Stages files and waits for VS Code Git to be ready before setting the commit message.
+ * Shows a cancellable progress notification during staging.
  */
 async function advanceSplitSession(): Promise<void> {
   if (!activeSplitSession) {
@@ -697,15 +742,42 @@ async function advanceSplitSession(): Promise<void> {
   }
 
   const commit = session.commits[session.currentIndex];
+  const stepLabel = `${session.currentIndex + 1}/${session.commits.length}`;
 
   // For commits 2+, files are unstaged (they were unstaged in step 1).
-  // Stage the next batch and wait for VS Code Git to reflect the change.
-  try {
-    await stageFiles(session.repo, commit.files);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Unknown error';
-    vscode.window.showErrorMessage(`Failed to stage files for next commit: ${msg}`);
+  // Stage the next batch with a cancellable progress notification.
+  let cancelled = false;
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Staging files for commit ${stepLabel}...`,
+      cancellable: true
+    },
+    async (_progress, token) => {
+      try {
+        await stageFiles(session.repo, commit.files, token);
+      } catch (err) {
+        if (err instanceof vscode.CancellationError || token.isCancellationRequested) {
+          cancelled = true;
+          return;
+        }
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        vscode.window.showErrorMessage(`Failed to stage files for next commit: ${msg}`);
+        cancelSplitSession();
+        return;
+      }
+    }
+  );
+
+  if (cancelled) {
     cancelSplitSession();
+    vscode.window.showInformationMessage('Split session cancelled.');
+    logDebug('Split session cancelled by user during staging');
+    return;
+  }
+
+  // Session may have been cancelled by error handler above
+  if (!activeSplitSession) {
     return;
   }
 
@@ -758,16 +830,31 @@ async function handleSplitCommit(
   if (result.mode === 'all') {
     logDebug('User selected stage all step by step');
 
+    let cancelled = false;
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
         title: 'Staging files for first commit...',
-        cancellable: false
+        cancellable: true
       },
-      async () => {
-        await startSplitSession(repo, commits, context);
+      async (_progress, token) => {
+        try {
+          await startSplitSession(repo, commits, context, token);
+        } catch (err) {
+          if (err instanceof vscode.CancellationError || token.isCancellationRequested) {
+            cancelled = true;
+            return;
+          }
+          throw err;
+        }
       }
     );
+
+    if (cancelled) {
+      cancelSplitSession();
+      vscode.window.showInformationMessage('Split session cancelled.');
+      logDebug('Split session cancelled by user during initial staging');
+    }
 
     // First commit message is already set by startSplitSession
     return undefined;
@@ -779,16 +866,30 @@ async function handleSplitCommit(
     files: result.commit.files
   });
 
+  let singleCancelled = false;
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: 'Staging files for selected commit...',
-      cancellable: false
+      cancellable: true
     },
-    async () => {
-      await stageFilesForCommit(repo, result.commit.files);
+    async (_progress, token) => {
+      try {
+        await stageFilesForCommit(repo, result.commit.files, token);
+      } catch (err) {
+        if (err instanceof vscode.CancellationError || token.isCancellationRequested) {
+          singleCancelled = true;
+          return;
+        }
+        throw err;
+      }
     }
   );
+
+  if (singleCancelled) {
+    logDebug('Single commit staging cancelled by user');
+    return undefined;
+  }
 
   return result.commit.message;
 }
