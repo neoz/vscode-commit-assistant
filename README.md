@@ -47,8 +47,9 @@ When the AI detects unrelated changes, it suggests splitting into multiple commi
   1. The first commit's files are staged and its message is set
   2. A status bar item shows your progress (e.g., "Split 1/3 | Next: fix(api)...")
   3. After you commit, the next commit is automatically staged
-  4. Click the status bar item to manually advance if needed
-  5. Repeat until all commits are done
+  4. Click the status bar item to skip to the next commit or cancel the session
+  5. Cancel at any point during staging via the progress dialog
+  6. Repeat until all commits are done
 
 The extension generates conventional commit messages in the format:
 ```
@@ -70,7 +71,8 @@ To use VS Code Language Models instead of Claude:
 - **Model selection**: Choose between Haiku (fast), Sonnet, or Opus for Claude
 - **Split commit detection**: Suggests splitting unrelated changes into atomic commits
 - **Step-by-step split commits**: Walk through all suggested commits sequentially with auto-advance
-- **Smart staging**: Auto-stages only relevant files for selected commit
+- **Cancellable split workflow**: Cancel staging or the entire split session at any point
+- **Smart staging**: Auto-stages only relevant files for selected commit with verification
 - **Sensitive file filtering**: Excludes .env, keys, and credentials from AI
 - **Customizable prompts**: Adjust system/user prompts for your team's conventions
 - **Progress indicator**: Shows generation status with cancel option
