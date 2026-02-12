@@ -29,6 +29,8 @@ This is a VS Code extension that generates git commit messages using AI provider
 **File Structure:**
 - `src/extension.ts` - VS Code integration, commands, UI, configuration
 - `src/providers.ts` - Provider interface, ClaudeProvider, VSCodeLMProvider
+- `documents/FEATURE_SPEC.md` - Product requirements document (PRD)
+- `documents/ROADMAP.md` - Product roadmap with version history
 
 **Flow:**
 1. User clicks sparkle button in SCM view (title bar or input box)
@@ -43,6 +45,12 @@ This is a VS Code extension that generates git commit messages using AI provider
 10. Single pick: stages selected files, inserts message
 11. Step-by-step: starts a split session that auto-advances through commits via `onDidCommit`
 
+**Split Session State:**
+- `SplitSession` interface tracks repo, commits, currentIndex, statusBarItem, commitListener
+- `activeSplitSession` module-level state; only one session active at a time
+- `waitForStagingReady()` polls `repo.status()` to verify VS Code Git reflects correct staged files
+- Re-generating or cancelling disposes status bar and commit listener
+
 **Providers:**
 - `ClaudeProvider` - Uses Claude Agent SDK, requires Claude Code CLI
 - `VSCodeLMProvider` - Uses VS Code Language Model API (GitHub Copilot, etc.)
@@ -56,6 +64,13 @@ This is a VS Code extension that generates git commit messages using AI provider
 - `scm/inputBox` - Proposed API, requires `--enable-proposed-api` flag
 - `scm/title` - Stable fallback in SCM header bar
 
+## Security Patterns
+
+- `getConfig()` reads prompts from **user settings only** (not workspace) to prevent prompt injection via `.vscode/settings.json`
+- `isValidRelativePath()` validates AI-suggested file paths against path traversal and absolute paths
+- `resolveAiFilesToStaged()` matches AI file suggestions against actual staged files (never trusts AI paths blindly)
+- `filterSensitiveDiff()` excludes files matching `excludePatterns` before sending diff to AI
+
 ## Configuration
 
 | Setting | Description | Default |
@@ -66,3 +81,10 @@ This is a VS Code extension that generates git commit messages using AI provider
 | `claude-commit.prompt` | Custom system prompt | (default prompt) |
 | `claude-commit.userPrompt` | Custom user prompt with `{diff}` placeholder | (default prompt) |
 | `claude-commit.excludePatterns` | Glob patterns for sensitive files | (env, keys, etc.) |
+
+## Release Workflow
+
+```bash
+npm run package        # standard-version (bumps version, changelog) + vsce package
+vsce publish           # Publish to VS Code Marketplace
+```
