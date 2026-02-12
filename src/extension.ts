@@ -92,6 +92,7 @@ interface Repository {
   diff(staged: boolean): Promise<string>;
   rootUri: vscode.Uri;
   state: RepositoryState;
+  status(): Promise<void>;
   onDidCommit: vscode.Event<void>;
 }
 
@@ -278,6 +279,47 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(command);
+}
+
+/**
+ * Wait for VS Code Git extension to reflect expected staged files.
+ * After modifying the git index directly (via execFileSync), VS Code's cached
+ * state may be stale. This refreshes the state and verifies staged files match.
+ */
+async function waitForStagingReady(
+  repo: Repository,
+  expectedFiles: string[],
+  maxRetries: number = 10,
+  intervalMs: number = 100
+): Promise<void> {
+  const expectedSet = new Set(expectedFiles.map(f => f.replace(/\\/g, '/')));
+
+  for (let i = 0; i < maxRetries; i++) {
+    await repo.status();
+    const currentStaged = getStagedRelativePaths(repo);
+    const currentSet = new Set(currentStaged);
+
+    // Check that every expected file is staged and no extra files are staged
+    const allExpectedStaged = [...expectedSet].every(f => currentSet.has(f));
+    const noExtraStaged = currentStaged.every(f => expectedSet.has(f));
+
+    if (allExpectedStaged && noExtraStaged) {
+      logDebug('Staging verified', { attempt: i + 1, staged: currentStaged });
+      return;
+    }
+
+    logDebug('Staging not yet ready, retrying...', {
+      attempt: i + 1,
+      expected: [...expectedSet],
+      actual: currentStaged
+    });
+
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+
+  // Final attempt - force one more refresh
+  await repo.status();
+  logDebug('Staging wait exhausted, proceeding with current state');
 }
 
 /**
@@ -535,13 +577,18 @@ async function stageFilesForCommit(
     logDebug('Failed to selectively unstage files', err);
     throw new Error('Failed to update staging area');
   }
+
+  // Wait for VS Code Git to reflect the new staging state before proceeding.
+  // Without this, the user could commit before VS Code sees the correct staged files.
+  await waitForStagingReady(repo, matched);
 }
 
 /**
  * Stage files by running `git add` for the given paths.
  * Used during step-by-step split sessions (commits 2+) where files are unstaged.
+ * Waits for VS Code Git to reflect the staging before returning.
  */
-function stageFiles(repo: Repository, files: string[]): void {
+async function stageFiles(repo: Repository, files: string[]): Promise<void> {
   const cwd = repo.rootUri.fsPath;
   const validFiles = files.filter(f => {
     if (!isValidRelativePath(f)) {
@@ -566,6 +613,9 @@ function stageFiles(repo: Repository, files: string[]): void {
     logDebug('Failed to stage files', err);
     throw new Error('Failed to stage files');
   }
+
+  // Wait for VS Code Git to reflect the staged files before allowing commit
+  await waitForStagingReady(repo, validFiles);
 }
 
 /**
@@ -628,8 +678,9 @@ async function startSplitSession(
 /**
  * Advance to the next commit in the split session.
  * Called automatically on commit or manually via status bar click.
+ * Stages files and waits for VS Code Git to be ready before setting the commit message.
  */
-function advanceSplitSession(): void {
+async function advanceSplitSession(): Promise<void> {
   if (!activeSplitSession) {
     return;
   }
@@ -648,9 +699,9 @@ function advanceSplitSession(): void {
   const commit = session.commits[session.currentIndex];
 
   // For commits 2+, files are unstaged (they were unstaged in step 1).
-  // Just stage the next batch directly.
+  // Stage the next batch and wait for VS Code Git to reflect the change.
   try {
-    stageFiles(session.repo, commit.files);
+    await stageFiles(session.repo, commit.files);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     vscode.window.showErrorMessage(`Failed to stage files for next commit: ${msg}`);
@@ -658,6 +709,7 @@ function advanceSplitSession(): void {
     return;
   }
 
+  // Only set the commit message after staging is verified ready
   session.repo.inputBox.value = commit.message;
   updateSplitStatusBar(session);
 
