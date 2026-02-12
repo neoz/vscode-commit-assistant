@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/neoz/vscode-commit-assistant/compare/v1.2.0...v1.3.0) (2026-02-12)
+
+
+### Features
+
+* **extension:** add cancellation support for split commit workflow ([bd3b1eb](https://github.com/neoz/vscode-commit-assistant/commit/bd3b1ebef786c670d8380849e6685813cb400ee4))
+* **git:** add staging readiness verification ([aed51b0](https://github.com/neoz/vscode-commit-assistant/commit/aed51b0a1109f5ad62be95e473900f05a2b58286))
+
 ## [1.2.0](https://github.com/neoz/vscode-commit-assistant/compare/v1.1.0...v1.2.0) (2026-02-10)
 
 
