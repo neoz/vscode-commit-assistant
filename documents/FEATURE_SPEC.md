@@ -1,6 +1,6 @@
 # Feature Spec: Claude Commit Message Generator
 
-> **Current Version**: 1.1.0 | **Last Updated**: 2026-02-05
+> **Current Version**: 1.2.0 | **Last Updated**: 2026-02-12
 
 ## 1. Problem Statement
 
@@ -67,6 +67,10 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 - **As a developer**, I want a status bar item showing my progress (e.g., "Split 1/3") so that I know where I am in the split workflow.
 
+- **As a developer**, I want to cancel a split session at any point (during staging or between commits) so that I can abort if I change my mind.
+
+- **As a developer**, I want the extension to verify staging is correct before showing the commit message so that I don't accidentally commit the wrong files.
+
 ### Configuration
 - **As a developer**, I want to customize the system prompt so that I can adjust the style of generated messages to my team's conventions.
 
@@ -131,6 +135,17 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Provider availability check | Extension checks if selected provider is available before generation | **Done** |
 | Clear unavailability errors | When provider unavailable, show specific error with setup instructions | **Done** |
 | Provider name in progress | Progress notification shows which provider is generating | **Done** |
+
+### Must-Have (P0) - **v1.2.0 Split Workflow Robustness**
+
+| Requirement | Acceptance Criteria | Status |
+|-------------|---------------------|--------|
+| Cancellable split staging | User can cancel file staging during any step of the split workflow via progress dialog | **Done** |
+| Cancellable split session | User can cancel the entire split session via status bar click or QuickPick menu | **Done** |
+| Staging readiness verification | Extension verifies VS Code Git API reflects correct staged files before setting commit message | **Done** |
+| Auto-advance on commit | After user commits, extension automatically stages next commit's files and sets message | **Done** |
+| Skip/cancel between commits | Status bar click opens QuickPick with skip-to-next and cancel options | **Done** |
+| Split session cleanup | Cancelling or completing a split session properly disposes status bar and listeners | **Done** |
 
 ### Nice-to-Have (P1)
 
@@ -202,21 +217,26 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 ## 9. Technical Architecture
 
-### Current Architecture (Multi-Provider, v1.1.0)
+### Current Architecture (v1.2.0)
 
 ```
 [User clicks sparkle]
+    -> [Cancel any active split session]
     -> [Get staged diff via vscode.git API]
+    -> [Filter sensitive files via excludePatterns]
     -> [Load config: provider, model, prompts]
     -> [Create provider via createProvider(type, model)]
     -> [Check provider.isAvailable()]
     -> [If unavailable: show error and stop]
     -> [Build prompt with system instructions + diff]
-    -> [Call provider.generateCommitMessage()]
+    -> [Call provider.generateCommitMessage() with cancellable progress]
     -> [Parse JSON response via Zod schemas]
     -> [If split suggested: show QuickPick with "Stage all step by step" + individual commits]
-    -> [Single pick: stage selected files -> insert message]
-    -> [Stage all: start split session -> auto-advance via onDidCommit]
+    -> [Single pick: unstage complement files -> waitForStagingReady() -> insert message]
+    -> [Stage all: startSplitSession() -> auto-advance via onDidCommit]
+        -> [Each advance: stageFiles() -> waitForStagingReady() -> insert message]
+        -> [User can cancel at any staging step or via status bar QuickPick]
+        -> [Last commit done: cleanup session and notify]
 ```
 
 ### File Structure
@@ -323,6 +343,14 @@ Both providers expect the same JSON response format:
 
 ## 10. Migration Notes
 
+### For Users (v1.1 -> v1.2)
+
+- **No breaking changes** - Same sparkle button workflow
+- **Improved**: Split commit workflow now supports cancellation at every step
+- **Improved**: Staging verification ensures correct files before commit message appears
+- **New**: Status bar QuickPick with skip-to-next and cancel options between commits
+- **New**: `claude-commit.nextSplitCommit` command for programmatic split session control
+
 ### For Users (v1.0 -> v1.1)
 
 - **No breaking changes** - Claude remains the default provider
@@ -340,6 +368,17 @@ Both providers expect the same JSON response format:
 
 ### For Development
 
+**v1.2.0 Architecture Changes:**
+1. Added `SplitSession` interface to track step-by-step commit state
+2. Added `waitForStagingReady()` to verify VS Code Git API reflects correct staged files (polling with retry)
+3. Added `stageFiles()` for staging files during step 2+ of split sessions
+4. Added `advanceSplitSession()` with cancellable progress notifications
+5. Added `cancelSplitSession()` for proper cleanup (dispose status bar, listeners)
+6. Added `updateSplitStatusBar()` to show progress (e.g., "Split 1/3 | Next: ...")
+7. Added `claude-commit.nextSplitCommit` command with skip/cancel QuickPick
+8. All staging operations now accept `CancellationToken` for user cancellation
+9. Re-generating cancels any active split session automatically
+
 **v1.1.0 Architecture Changes:**
 1. Split `extension.ts` into two files: `extension.ts` and `providers.ts`
 2. Created `CommitProvider` interface for provider abstraction
@@ -348,7 +387,12 @@ Both providers expect the same JSON response format:
 5. Extracted shared helpers: `buildPrompt()`, `withTimeout()`
 6. Updated config to include `provider` and `model` settings
 
-### Breaking Changes
+### Breaking Changes (v1.2)
+
+- None for end users
+- Internal: Added `SplitSession` state management and `nextSplitCommit` command
+
+### Breaking Changes (v1.1)
 
 - None for end users
 - Internal: `generateCommitMessage()` function moved to provider classes
