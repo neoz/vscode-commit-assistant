@@ -1,6 +1,6 @@
 # Product Roadmap: Claude Commit Message Generator
 
-> Last updated: 2026-02-05
+> Last updated: 2026-02-12
 
 ---
 
@@ -8,18 +8,18 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 25 items |
+| **Done** | 28 items |
 | **Now** | 0 items |
 | **Next** | 3 items |
 | **Later** | 4 items |
 
-**Current Version**: 1.1.0
+**Current Version**: 1.2.0
 
 ---
 
 ## Now (Current Focus)
 
-All v1.0.0 items have been completed. Ready to start Next items.
+All items through v1.2.0 have been completed. Ready to start Next items.
 
 | Item | Description | Status | Priority |
 |------|-------------|--------|----------|
@@ -60,10 +60,13 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
+| **Cancellation support for split workflow** | User can cancel file staging at any step; cancel entire split session via status bar or QuickPick | 1.2.0 | **Done** |
+| **Staging readiness verification** | Extension verifies VS Code Git API reflects correct staged files before setting commit message | 1.2.0 | **Done** |
+| **Split session management** | Status bar QuickPick with skip-to-next and cancel options; auto-cleanup on completion | 1.2.0 | **Done** |
 | **VS Code Language Model provider** | Add VS Code LM API as alternative AI backend; user can configure provider in settings | 1.1.0 | **Done** |
 | **Provider abstraction layer** | Create unified interface for AI providers to enable seamless switching | 1.1.0 | **Done** |
 | **Model selection** | Allow users to choose model (Claude: Haiku/Sonnet/Opus, VS Code LM: any available) | 1.1.0 | **Done** |
-| **Step-by-step split commits** | "Stage all step by step" option to walk through each suggested commit sequentially with auto-advance on commit | 1.2.0 | **Done** |
+| **Step-by-step split commits** | "Stage all step by step" option to walk through each suggested commit sequentially with auto-advance on commit | 1.1.0 | **Done** |
 | **Configurable timeout** | User can adjust timeout for slow network conditions | 0.0.7 | **Done** |
 | **Configurable system prompt** | User can customize the system prompt for different conventions | 0.0.7 | **Done** |
 | **Configurable user prompt** | User can customize how diff is presented to Claude | 0.0.7 | **Done** |
@@ -112,21 +115,18 @@ Items shipped in previous releases.
 
 ## Prioritization Rationale
 
-**Now items**: v1.0.0 complete - SDK migration shipped with cancellation, better errors, and faster timeout.
+**Now items**: v1.2.0 complete - Split workflow is now robust with cancellation, staging verification, and session management.
 
 **Next items** were selected based on:
-- Provider flexibility (GitHub Copilot support for users without Claude Code)
-- Architecture foundation (provider abstraction enables future AI backends)
-- User control (model selection for cost/quality tradeoff)
-- Discoverability (keyboard shortcut)
-- Transparency (token usage display)
+- Discoverability (keyboard shortcut for quick access)
+- Transparency (token usage display for cost awareness)
+- Multi-repo support rounds out workspace capability
 
 **Later items** are deferred because:
 - Lower priority than core improvements (commit body support)
 - Require SDK features to be stable first (streaming)
-- Require significant new UI (multiple suggestions)
 - Separate feature scope (PR descriptions)
-- Multi-repo deprioritized in favor of provider support
+- Smart diff summarization is a nice-to-have optimization
 
 ---
 
@@ -137,11 +137,12 @@ Items shipped in previous releases.
 | **0.0.4** | **SDK Migration** | Claude Agent SDK, cancellable generation, improved errors, 30s timeout | **Done** |
 | **0.0.5** | **Split Detection** | Split commit detection, staging workflow | **Done** |
 | **0.0.6** | **Refinements** | Bug fixes, dependency updates | **Done** |
-| **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **In Progress** |
+| **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **Done** |
 | 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Done** |
 | **1.1.0** | **Multi-Provider** | VS Code LM provider, provider abstraction, model selection | **Done** |
-| 1.2.0 | User Control | Keyboard shortcut, token usage display | **Planned** |
-| 1.3.0 | Power Users | Multi-repo support, commit body support | **Planned** |
+| **1.2.0** | **Split Workflow Robustness** | Cancellation support, staging verification, split session management | **Done** |
+| 1.3.0 | User Control | Keyboard shortcut, token usage display | **Planned** |
+| 1.4.0 | Power Users | Multi-repo support, commit body support | **Planned** |
 | 2.0.0 | Enhanced UX | Streaming response, smart diff summarization | **Planned** |
 
 ---
@@ -203,6 +204,31 @@ Add GitHub Copilot as an alternative AI provider for commit message generation. 
 ---
 
 ## Changes This Update
+
+### v1.2.0 Release (2026-02-12)
+
+**Items Completed:**
+- Cancellation support for split commit workflow (P0)
+- Staging readiness verification (P0)
+- Split session management with skip/cancel controls (P0)
+
+**Architecture Changes:**
+- Added `SplitSession` interface to track step-by-step commit state
+- Added `waitForStagingReady()` with polling and retry to verify staging state
+- Added `stageFiles()` for staging during subsequent split steps (commits 2+)
+- Added `advanceSplitSession()` with cancellable progress notifications
+- Added `cancelSplitSession()` with proper resource cleanup (dispose status bar, listeners)
+- Added `updateSplitStatusBar()` for progress display ("Split 1/3 | Next: ...")
+- Added `claude-commit.nextSplitCommit` command with QuickPick (skip/cancel)
+- All staging operations now accept `CancellationToken` for user cancellation
+- Re-generating commit message auto-cancels any active split session
+
+**User-Facing Improvements:**
+- Cancel split staging at any step via progress dialog
+- Status bar shows split progress and allows skip/cancel via click
+- Extension verifies correct files are staged before showing commit message
+- Auto-advance after commit stages next files with cancellable progress
+- Clean completion message when all split commits are done
 
 ### v1.1.0 Release (2026-02-05)
 
