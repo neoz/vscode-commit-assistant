@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/neoz/vscode-commit-assistant/compare/v1.3.0...v1.4.0) (2026-02-14)
+
+
+### Features
+
+* **commit:** add file deduplication for split commits ([2f22d17](https://github.com/neoz/vscode-commit-assistant/commit/2f22d17160585724508f8c73ba02f12aa5b1e0ce))
+
 ## [1.3.0](https://github.com/neoz/vscode-commit-assistant/compare/v1.2.0...v1.3.0) (2026-02-12)
 
 
