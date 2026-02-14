@@ -1,6 +1,6 @@
 # Feature Spec: Claude Commit Message Generator
 
-> **Current Version**: 1.2.0 | **Last Updated**: 2026-02-12
+> **Current Version**: 1.4.0 | **Last Updated**: 2026-02-14
 
 ## 1. Problem Statement
 
@@ -71,6 +71,8 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 - **As a developer**, I want the extension to verify staging is correct before showing the commit message so that I don't accidentally commit the wrong files.
 
+- **As a developer**, I want files that appear in multiple AI-suggested commits to be automatically deduplicated so that each file is committed exactly once.
+
 ### Configuration
 - **As a developer**, I want to customize the system prompt so that I can adjust the style of generated messages to my team's conventions.
 
@@ -136,7 +138,7 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Clear unavailability errors | When provider unavailable, show specific error with setup instructions | **Done** |
 | Provider name in progress | Progress notification shows which provider is generating | **Done** |
 
-### Must-Have (P0) - **v1.2.0 Split Workflow Robustness**
+### Must-Have (P0) - **v1.3.0 Split Workflow Robustness**
 
 | Requirement | Acceptance Criteria | Status |
 |-------------|---------------------|--------|
@@ -146,6 +148,15 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 | Auto-advance on commit | After user commits, extension automatically stages next commit's files and sets message | **Done** |
 | Skip/cancel between commits | Status bar click opens QuickPick with skip-to-next and cancel options | **Done** |
 | Split session cleanup | Cancelling or completing a split session properly disposes status bar and listeners | **Done** |
+
+### Must-Have (P0) - **v1.4.0 File Deduplication**
+
+| Requirement | Acceptance Criteria | Status |
+|-------------|---------------------|--------|
+| File deduplication across commits | When AI assigns the same file to multiple commits, file stays in the first commit only (first-wins strategy) | **Done** |
+| Empty commit pruning | Commits left with 0 files after deduplication are dropped entirely | **Done** |
+| User notification | User is informed when files are consolidated, with count and context | **Done** |
+| Single commit fallback | If deduplication reduces to a single commit, skip the split picker and use that commit directly | **Done** |
 
 ### Nice-to-Have (P1)
 
@@ -217,7 +228,7 @@ This problem affects all developers using VS Code with Git, occurring multiple t
 
 ## 9. Technical Architecture
 
-### Current Architecture (v1.2.0)
+### Current Architecture (v1.4.0)
 
 ```
 [User clicks sparkle]
@@ -231,7 +242,9 @@ This problem affects all developers using VS Code with Git, occurring multiple t
     -> [Build prompt with system instructions + diff]
     -> [Call provider.generateCommitMessage() with cancellable progress]
     -> [Parse JSON response via Zod schemas]
-    -> [If split suggested: show QuickPick with "Stage all step by step" + individual commits]
+    -> [If split suggested: deduplicateCommitFiles() (first-wins, drop empty commits)]
+    -> [If dedup reduces to 1 commit: use directly, skip picker]
+    -> [Show QuickPick with "Stage all step by step" + individual commits]
     -> [Single pick: unstage complement files -> waitForStagingReady() -> insert message]
     -> [Stage all: startSplitSession() -> auto-advance via onDidCommit]
         -> [Each advance: stageFiles() -> waitForStagingReady() -> insert message]
@@ -285,6 +298,14 @@ Both providers expect the same JSON response format:
   ]
 }
 ```
+
+### File Deduplication (v1.4.0)
+
+When the AI suggests splitting into multiple commits, `deduplicateCommitFiles()` ensures each file appears in exactly one commit:
+1. Iterates commits in order; the first commit to reference a file "owns" it
+2. Duplicate references in later commits are removed
+3. Commits left with 0 files are dropped entirely
+4. User is notified of consolidated files
 
 ### Configuration Schema (v1.1.0)
 
@@ -343,13 +364,25 @@ Both providers expect the same JSON response format:
 
 ## 10. Migration Notes
 
-### For Users (v1.1 -> v1.2)
+### For Users (v1.3 -> v1.4)
+
+- **No breaking changes** - Same sparkle button workflow
+- **New**: File deduplication across split commits (first-wins strategy)
+- **New**: User notification when files are consolidated across commits
+- **Improved**: If deduplication reduces to a single commit, the split picker is skipped
+
+### For Users (v1.2 -> v1.3)
 
 - **No breaking changes** - Same sparkle button workflow
 - **Improved**: Split commit workflow now supports cancellation at every step
 - **Improved**: Staging verification ensures correct files before commit message appears
 - **New**: Status bar QuickPick with skip-to-next and cancel options between commits
 - **New**: `claude-commit.nextSplitCommit` command for programmatic split session control
+
+### For Users (v1.1 -> v1.2)
+
+- **No breaking changes** - Same sparkle button workflow
+- **New**: Step-by-step split commit workflow with auto-advance on commit
 
 ### For Users (v1.0 -> v1.1)
 
@@ -368,7 +401,14 @@ Both providers expect the same JSON response format:
 
 ### For Development
 
-**v1.2.0 Architecture Changes:**
+**v1.4.0 Architecture Changes:**
+1. Added `deduplicateCommitFiles()` function using first-wins strategy
+2. Normalizes file paths (backslash to forward slash) before dedup comparison
+3. Drops commits left with 0 files after deduplication
+4. Shows user notification with consolidated file count and context
+5. Falls back to single commit if dedup reduces to 1 commit (skips QuickPick)
+
+**v1.3.0 Architecture Changes:**
 1. Added `SplitSession` interface to track step-by-step commit state
 2. Added `waitForStagingReady()` to verify VS Code Git API reflects correct staged files (polling with retry)
 3. Added `stageFiles()` for staging files during step 2+ of split sessions
@@ -387,7 +427,12 @@ Both providers expect the same JSON response format:
 5. Extracted shared helpers: `buildPrompt()`, `withTimeout()`
 6. Updated config to include `provider` and `model` settings
 
-### Breaking Changes (v1.2)
+### Breaking Changes (v1.4)
+
+- None for end users
+- Internal: Added `deduplicateCommitFiles()` and single-commit fallback logic
+
+### Breaking Changes (v1.3)
 
 - None for end users
 - Internal: Added `SplitSession` state management and `nextSplitCommit` command
