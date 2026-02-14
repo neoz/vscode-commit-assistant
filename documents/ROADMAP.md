@@ -1,6 +1,6 @@
 # Product Roadmap: Claude Commit Message Generator
 
-> Last updated: 2026-02-12
+> Last updated: 2026-02-14
 
 ---
 
@@ -8,18 +8,18 @@
 
 | Status | Count |
 |--------|-------|
-| **Done** | 28 items |
+| **Done** | 32 items |
 | **Now** | 0 items |
 | **Next** | 3 items |
 | **Later** | 4 items |
 
-**Current Version**: 1.2.0
+**Current Version**: 1.4.0
 
 ---
 
 ## Now (Current Focus)
 
-All items through v1.2.0 have been completed. Ready to start Next items.
+All items through v1.4.0 have been completed. Ready to start Next items.
 
 | Item | Description | Status | Priority |
 |------|-------------|--------|----------|
@@ -60,9 +60,10 @@ Items shipped in previous releases.
 
 | Item | Description | Version | Status |
 |------|-------------|---------|--------|
-| **Cancellation support for split workflow** | User can cancel file staging at any step; cancel entire split session via status bar or QuickPick | 1.2.0 | **Done** |
-| **Staging readiness verification** | Extension verifies VS Code Git API reflects correct staged files before setting commit message | 1.2.0 | **Done** |
-| **Split session management** | Status bar QuickPick with skip-to-next and cancel options; auto-cleanup on completion | 1.2.0 | **Done** |
+| **File deduplication for split commits** | First-wins dedup ensures each file appears in exactly one commit; empty commits dropped; user notified | 1.4.0 | **Done** |
+| **Cancellation support for split workflow** | User can cancel file staging at any step; cancel entire split session via status bar or QuickPick | 1.3.0 | **Done** |
+| **Staging readiness verification** | Extension verifies VS Code Git API reflects correct staged files before setting commit message | 1.3.0 | **Done** |
+| **Split session management** | Status bar QuickPick with skip-to-next and cancel options; auto-cleanup on completion | 1.3.0 | **Done** |
 | **VS Code Language Model provider** | Add VS Code LM API as alternative AI backend; user can configure provider in settings | 1.1.0 | **Done** |
 | **Provider abstraction layer** | Create unified interface for AI providers to enable seamless switching | 1.1.0 | **Done** |
 | **Model selection** | Allow users to choose model (Claude: Haiku/Sonnet/Opus, VS Code LM: any available) | 1.1.0 | **Done** |
@@ -115,7 +116,7 @@ Items shipped in previous releases.
 
 ## Prioritization Rationale
 
-**Now items**: v1.2.0 complete - Split workflow is now robust with cancellation, staging verification, and session management.
+**Now items**: v1.4.0 complete - Split workflow is robust with cancellation, staging verification, session management, and file deduplication.
 
 **Next items** were selected based on:
 - Discoverability (keyboard shortcut for quick access)
@@ -140,9 +141,11 @@ Items shipped in previous releases.
 | **0.0.7** | **Configuration** | Configurable timeout, system prompt, user prompt | **Done** |
 | 1.0.0 | Stable Release | Version bump for marketplace, documentation polish | **Done** |
 | **1.1.0** | **Multi-Provider** | VS Code LM provider, provider abstraction, model selection | **Done** |
-| **1.2.0** | **Split Workflow Robustness** | Cancellation support, staging verification, split session management | **Done** |
-| 1.3.0 | User Control | Keyboard shortcut, token usage display | **Planned** |
-| 1.4.0 | Power Users | Multi-repo support, commit body support | **Planned** |
+| **1.2.0** | **Split Workflow** | Step-by-step split commit workflow with auto-advance | **Done** |
+| **1.3.0** | **Split Workflow Robustness** | Cancellation support, staging verification, split session management | **Done** |
+| **1.4.0** | **File Deduplication** | First-wins dedup for split commits, empty commit pruning, user notification | **Done** |
+| 1.5.0 | User Control | Keyboard shortcut, token usage display | **Planned** |
+| 1.6.0 | Power Users | Multi-repo support, commit body support | **Planned** |
 | 2.0.0 | Enhanced UX | Streaming response, smart diff summarization | **Planned** |
 
 ---
@@ -205,7 +208,23 @@ Add GitHub Copilot as an alternative AI provider for commit message generation. 
 
 ## Changes This Update
 
-### v1.2.0 Release (2026-02-12)
+### v1.4.0 Release (2026-02-14)
+
+**Items Completed:**
+- File deduplication for split commits (P0)
+
+**Architecture Changes:**
+- Added `deduplicateCommitFiles()` function with first-wins strategy
+- Normalizes file paths (backslash to forward slash) before dedup comparison
+- Drops commits left with 0 files after deduplication
+- Falls back to single commit if dedup reduces to 1 commit (skips QuickPick)
+
+**User-Facing Improvements:**
+- Files appearing in multiple AI-suggested commits are automatically consolidated
+- User is notified when files are deduplicated, with count and context
+- Split picker is skipped if deduplication reduces to a single commit
+
+### v1.3.0 Release (2026-02-12)
 
 **Items Completed:**
 - Cancellation support for split commit workflow (P0)
@@ -229,6 +248,20 @@ Add GitHub Copilot as an alternative AI provider for commit message generation. 
 - Extension verifies correct files are staged before showing commit message
 - Auto-advance after commit stages next files with cancellable progress
 - Clean completion message when all split commits are done
+
+### v1.2.0 Release (2026-02-10)
+
+**Items Completed:**
+- Step-by-step split commit workflow with auto-advance (P0)
+
+**Architecture Changes:**
+- Added step-by-step "Stage all" option in QuickPick
+- Added `onDidCommit` listener for auto-advance after user commits
+- Added status bar item showing split progress
+
+**User-Facing Improvements:**
+- "Stage all step by step" option walks through each commit sequentially
+- Auto-advance to next commit after user commits
 
 ### v1.1.0 Release (2026-02-05)
 
