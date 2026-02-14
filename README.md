@@ -51,6 +51,8 @@ When the AI detects unrelated changes, it suggests splitting into multiple commi
   5. Cancel at any point during staging via the progress dialog
   6. Repeat until all commits are done
 
+If the AI assigns the same file to multiple commits, the extension automatically deduplicates using a first-wins strategy and notifies you.
+
 The extension generates conventional commit messages in the format:
 ```
 type(scope): description
@@ -71,6 +73,7 @@ To use VS Code Language Models instead of Claude:
 - **Model selection**: Choose between Haiku (fast), Sonnet, or Opus for Claude
 - **Split commit detection**: Suggests splitting unrelated changes into atomic commits
 - **Step-by-step split commits**: Walk through all suggested commits sequentially with auto-advance
+- **File deduplication**: Automatically resolves duplicate file assignments across split commits
 - **Cancellable split workflow**: Cancel staging or the entire split session at any point
 - **Smart staging**: Auto-stages only relevant files for selected commit with verification
 - **Sensitive file filtering**: Excludes .env, keys, and credentials from AI
