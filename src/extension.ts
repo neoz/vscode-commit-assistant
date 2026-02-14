@@ -37,6 +37,7 @@ const DEFAULT_SYSTEM_PROMPT = `You are a Git commit message generator. Analyze t
 
 ## Split Detection
 If the diff contains multiple unrelated changes (different features, fixes, or concerns, .. etc), set suggest_split: true and provide separate commit messages.
+Each file MUST appear in exactly one commit. Never assign the same file to multiple commits. If a file has mixed concerns, assign it to the most relevant commit.
 
 ## Output JSON
 You MUST respond with valid JSON only, no other text:
@@ -554,6 +555,51 @@ function filterSensitiveDiff(
 }
 
 /**
+ * Deduplicate files across split commits using a first-wins strategy.
+ * If the same file appears in multiple commits, it stays in the first commit
+ * and is removed from later ones. Commits left with 0 files are dropped.
+ * Returns the cleaned commits and list of consolidated file descriptions.
+ */
+function deduplicateCommitFiles(
+  commits: CommitSuggestion[]
+): { commits: CommitSuggestion[]; consolidated: string[] } {
+  const seen = new Set<string>();
+  const consolidated: string[] = [];
+  const result: CommitSuggestion[] = [];
+
+  for (const commit of commits) {
+    const uniqueFiles: string[] = [];
+
+    for (const file of commit.files) {
+      const normalized = file.replace(/\\/g, '/');
+      if (seen.has(normalized)) {
+        // File already claimed by an earlier commit
+        const ownerCommit = result.find(c =>
+          c.files.some(f => f.replace(/\\/g, '/') === normalized)
+        );
+        const ownerMsg = ownerCommit
+          ? `"${ownerCommit.message}"`
+          : 'an earlier commit';
+        consolidated.push(`${file} -> ${ownerMsg}`);
+      } else {
+        seen.add(normalized);
+        uniqueFiles.push(file);
+      }
+    }
+
+    if (uniqueFiles.length > 0) {
+      result.push({ ...commit, files: uniqueFiles });
+    } else {
+      logDebug('Dropped commit with no remaining files after dedup', {
+        message: commit.message
+      });
+    }
+  }
+
+  return { commits: result, consolidated };
+}
+
+/**
  * Selectively unstage files not belonging to the selected commit.
  * Uses VS Code Git API to read staged state, validates AI paths against it,
  * then only unstages the complement (files NOT in the selected commit).
@@ -819,6 +865,35 @@ async function handleSplitCommit(
   context: vscode.ExtensionContext
 ): Promise<string | undefined> {
   logDebug('Split suggested', { commitCount: commits.length });
+
+  // Deduplicate files across commits (first-wins strategy)
+  const dedup = deduplicateCommitFiles(commits);
+  commits = dedup.commits;
+
+  if (dedup.consolidated.length > 0) {
+    logDebug('Deduplicated overlapping files across commits', {
+      consolidated: dedup.consolidated
+    });
+
+    if (dedup.consolidated.length === 1) {
+      const fileName = dedup.consolidated[0].split(' -> ')[0];
+      vscode.window.showInformationMessage(
+        `"${fileName}" appeared in multiple commits -- consolidated into its first referenced commit.`
+      );
+    } else {
+      vscode.window.showInformationMessage(
+        `${dedup.consolidated.length} files appeared in multiple commits -- consolidated into their first referenced commit.`
+      );
+    }
+  }
+
+  // If dedup reduced to a single commit, skip the split picker
+  if (commits.length <= 1) {
+    if (commits.length === 1) {
+      return commits[0].message;
+    }
+    return undefined;
+  }
 
   const result = await showSplitCommitPicker(commits);
 
