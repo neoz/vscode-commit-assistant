@@ -172,7 +172,7 @@ function findClaudeExecutable(): string | undefined {
 export class ClaudeProvider implements CommitProvider {
   readonly name = 'Claude';
 
-  constructor(private model: string = 'haiku') {}
+  constructor(private model: string = 'sonnet') {}
 
   async isAvailable(): Promise<boolean> {
     return findClaudeExecutable() !== undefined;

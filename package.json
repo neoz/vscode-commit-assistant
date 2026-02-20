@@ -103,7 +103,7 @@
         },
         "claude-commit.model": {
           "type": "string",
-          "default": "haiku",
+          "default": "sonnet",
           "description": "Model to use. For Claude: 'haiku', 'sonnet', or 'opus'. For VS Code LM: model family like 'gpt-4o', 'claude-3.5-sonnet'"
         }
       }
