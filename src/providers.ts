@@ -194,8 +194,6 @@ export class ClaudeProvider implements CommitProvider {
         throw new Error('Claude Code CLI not found in PATH');
       }
 
-      const modelId = this.getModelId();
-
       for await (const message of query({
         prompt,
         options: {
@@ -203,7 +201,7 @@ export class ClaudeProvider implements CommitProvider {
           maxTurns: 1,
           allowedTools: [],
           pathToClaudeCodeExecutable: claudePath,
-          model: modelId
+          model: this.model
         }
       })) {
         if (abortController.signal.aborted) {
@@ -243,21 +241,6 @@ export class ClaudeProvider implements CommitProvider {
     })();
 
     return withTimeout(generatePromise, config.timeout, abortController);
-  }
-
-  private getModelId(): string {
-    // Map user-friendly names to model IDs
-    switch (this.model.toLowerCase()) {
-      case 'haiku':
-        return 'claude-3-5-haiku-20241022';
-      case 'sonnet':
-        return 'claude-sonnet-4-20250514';
-      case 'opus':
-        return 'claude-opus-4-20250514';
-      default:
-        // Allow full model IDs to be passed through
-        return this.model;
-    }
   }
 }
 
